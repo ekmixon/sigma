@@ -49,7 +49,7 @@ async def run_sigmac():
             )
     print("* Launching sigmac")
     proc = await sigmac
-    print("* sigmac launched with PID {}".format(proc.pid))
+    print(f"* sigmac launched with PID {proc.pid}")
 
     cur_rule = None
     while True:
@@ -67,22 +67,22 @@ async def run_sigmac():
     await proc.wait()
 
     exitcode = proc.returncode
-    print("* sigmac returned with exit code {}".format(exitcode))
+    print(f"* sigmac returned with exit code {exitcode}")
     return exitcode
 
 
 # Generated query checker loop
 async def check_queries():
-    failed = list()
+    failed = []
     print("# Waiting for queries")
     while True:
         rule, query = await queries.get()
         if query is not None:
-            print("# Checking query (rule {}): {}".format(rule, query))
+            print(f"# Checking query (rule {rule}): {query}")
             result = await esa.indices.validate_query(index=index, q=query)
             valid = result['valid']
 
-            print("# Received Result for rule {} query={}: {}".format(rule, query, valid))
+            print(f"# Received Result for rule {rule} query={query}: {valid}")
             if not valid:
                 try:
                     detail_result = await esa.search(index=index, q=query)
@@ -129,9 +129,9 @@ except Exception:
 
 query_check_result_cnt = len(query_check_result)
 if query_check_result_cnt > 0:
-    print("!!! {} queries failed to check:".format(query_check_result_cnt))
+    print(f"!!! {query_check_result_cnt} queries failed to check:")
     for rule, query, error in query_check_result:
-        print("- {}: {}".format(rule, query))
+        print(f"- {rule}: {query}")
         print("Error:")
         pp.pprint(error)
         print()

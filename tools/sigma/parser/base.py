@@ -45,7 +45,7 @@ class SimpleParser:
 
         for token in tokens:
             if self.state < 0:
-                raise SigmaParseError("No further token expected, but read %s" % (str(token)))
+                raise SigmaParseError(f"No further token expected, but read {str(token)}")
             try:
                 rule = self.parsingrules[self.state][token.type]
             except KeyError as e:
@@ -57,11 +57,11 @@ class SimpleParser:
                 trans_value = getattr(self, rule[1])(value)
             if rule[0] != None:
                 setattr(self, rule[0], trans_value)
-                setattr(self, rule[0] + "_notrans", value)
+                setattr(self, f"{rule[0]}_notrans", value)
             if rule[2] != None:
                 self.state = rule[2]
         if self.state not in self.finalstates:
             raise SigmaParseError("Unexpected end of aggregation expression, state=%d" % (self.state))
 
     def __str__(self):  # pragma: no cover
-        return "[ Parsed: %s ]" % (" ".join(["%s=%s" % (key, val) for key, val in self.__dict__.items() ]))
+        return f'[ Parsed: {" ".join([f"{key}={val}" for key, val in self.__dict__.items()])} ]'

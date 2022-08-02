@@ -26,6 +26,7 @@ Requirements:
     $ pip install pyyaml
 """
 
+
 import yaml
 import glob
 import argparse
@@ -37,7 +38,7 @@ parser.add_argument("-d", "--delimiter", help="Separator", default=",", type=str
 parser.add_argument("--oneline", help="Put all tags on a single line", action="store_true")
 args = parser.parse_args()
 
-files = glob.glob(args.rulesdirectory + "/**/*." + args.fileext, recursive=True)
+files = glob.glob(f"{args.rulesdirectory}/**/*.{args.fileext}", recursive=True)
 # for each file in the given directory
 for file in files:
     d={}
@@ -56,8 +57,7 @@ for file in files:
                     print(f'{d["title"]}{args.delimiter}{d["description"]}{args.delimiter}{d["level"]}{args.delimiter}{d["author"]}{args.delimiter}{expandTags}')
                 else:
                     print(f'{d["title"]}{args.delimiter}{d["description"]}{args.delimiter}{d["level"]}{args.delimiter}{d["author"]}')
-            else: 
-                if "tags" in d:
-                    for tag in d["tags"]:
-                        if "attack" in tag: # Only output attack related tags
-                            print(f'{d["title"]}{args.delimiter}{d["description"]}{args.delimiter}{d["level"]}{args.delimiter}{d["author"]}{args.delimiter}{tag}')
+            elif "tags" in d:
+                for tag in d["tags"]:
+                    if "attack" in tag: # Only output attack related tags
+                        print(f'{d["title"]}{args.delimiter}{d["description"]}{args.delimiter}{d["level"]}{args.delimiter}{d["author"]}{args.delimiter}{tag}')

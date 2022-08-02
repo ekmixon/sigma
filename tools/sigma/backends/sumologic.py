@@ -65,49 +65,38 @@ class SumoLogicBackend(SingleTextQueryBackend):
         if agg.aggfunc == SigmaAggregationParser.AGGFUNC_NEAR:
             raise NotImplementedError("The 'near' aggregation operator is not yet implemented for this backend")
         if self.keypresent:
-            if not agg.groupfield:
-                if agg.aggfield:
-                    agg.aggfunc_notrans = "count_distinct"
-                    return " \n| %s(%s) \n| where _count_distinct %s %s" % (
-                        agg.aggfunc_notrans, agg.aggfield, agg.cond_op, agg.condition)
-                else:
-                    return "  \n| %s | where _count %s %s" % (
-                    agg.aggfunc_notrans, agg.cond_op, agg.condition)
-            elif agg.groupfield:
-                if agg.aggfield:
-                    agg.aggfunc_notrans = "count_distinct"
-                    return " \n| %s(%s) by %s \n| where _count_distinct %s %s" % (
-                        agg.aggfunc_notrans, agg.aggfield, agg.groupfield, agg.cond_op, agg.condition)
-                else:
+            if agg.groupfield:
+                if not agg.aggfield:
                     return " \n| %s by %s \n| where _count %s %s" % (
                         agg.aggfunc_notrans, agg.groupfield, agg.cond_op, agg.condition)
+                agg.aggfunc_notrans = "count_distinct"
+                return " \n| %s(%s) by %s \n| where _count_distinct %s %s" % (
+                    agg.aggfunc_notrans, agg.aggfield, agg.groupfield, agg.cond_op, agg.condition)
+            elif agg.aggfield:
+                agg.aggfunc_notrans = "count_distinct"
+                return " \n| %s(%s) \n| where _count_distinct %s %s" % (
+                    agg.aggfunc_notrans, agg.aggfield, agg.cond_op, agg.condition)
             else:
-                return " \n| %s | where _count %s %s" % (agg.aggfunc_notrans, agg.cond_op, agg.condition)
+                return "  \n| %s | where _count %s %s" % (
+                agg.aggfunc_notrans, agg.cond_op, agg.condition)
+        elif not agg.groupfield:
+            if not agg.aggfield:
+                return " \n| %s | where _count %s %s" % (
+                agg.aggfunc_notrans, agg.cond_op, agg.condition)
+            agg.aggfunc_notrans = "count_distinct"
+            return " \n| parse \"[%s=*]\" as searched nodrop\n| %s(searched) \n| where _count_distinct %s %s" % (
+                agg.aggfield, agg.aggfunc_notrans, agg.cond_op, agg.condition)
+        elif agg.aggfield:
+            agg.aggfunc_notrans = "count_distinct"
+            return " \n| parse \"[%s=*]\" as searched nodrop\n| parse \"[%s=*]\" as grpd nodrop\n| %s(searched) by grpd \n| where _count_distinct %s %s" % (
+                agg.aggfield, agg.groupfield, agg.aggfunc_notrans, agg.cond_op, agg.condition)
         else:
-            if not agg.groupfield:
-                if agg.aggfield:
-                    agg.aggfunc_notrans = "count_distinct"
-                    return " \n| parse \"[%s=*]\" as searched nodrop\n| %s(searched) \n| where _count_distinct %s %s" % (
-                        agg.aggfield, agg.aggfunc_notrans, agg.cond_op, agg.condition)
-                else:
-                    return " \n| %s | where _count %s %s" % (
-                    agg.aggfunc_notrans, agg.cond_op, agg.condition)
-            elif agg.groupfield:
-                if agg.aggfield:
-                    agg.aggfunc_notrans = "count_distinct"
-                    return " \n| parse \"[%s=*]\" as searched nodrop\n| parse \"[%s=*]\" as grpd nodrop\n| %s(searched) by grpd \n| where _count_distinct %s %s" % (
-                        agg.aggfield, agg.groupfield, agg.aggfunc_notrans, agg.cond_op, agg.condition)
-                else:
-                    return " \n| parse \"[%s=*]\" as grpd nodrop\n| %s by grpd \n| where _count %s %s" % (
-                        agg.groupfield, agg.aggfunc_notrans, agg.cond_op, agg.condition)
-            else:
-                return " \n| %s | where _count %s %s" % (agg.aggfunc_notrans, agg.cond_op, agg.condition)
+            return " \n| parse \"[%s=*]\" as grpd nodrop\n| %s by grpd \n| where _count %s %s" % (
+                agg.groupfield, agg.aggfunc_notrans, agg.cond_op, agg.condition)
 
     def generateBefore(self, parsed):
         # not required but makes query faster, especially if no FER or _index/_sourceCategory
-        if self.logname:
-            return "%s " % self.logname
-        return ""
+        return f"{self.logname} " if self.logname else ""
 
     def generate(self, sigmaparser):
         try:
@@ -135,7 +124,12 @@ class SumoLogicBackend(SingleTextQueryBackend):
             query = self.generateQuery(parsed)
             # FIXME! exclude if expression is regexp but anyway, not directly supported.
             #   Not doing if aggregation ('| count') or key ('=')
-            if not (query.startswith('"') and query.endswith('"')) and not (query.startswith('(') and query.endswith(')')) and not ('|' in query) and not ('=' in query):
+            if (
+                not (query.startswith('"') and query.endswith('"'))
+                and not (query.startswith('(') and query.endswith(')'))
+                and '|' not in query
+                and '=' not in query
+            ):
                 query = '"%s"' % query
             before = self.generateBefore(parsed)
             after = self.generateAfter(parsed)
@@ -148,12 +142,7 @@ class SumoLogicBackend(SingleTextQueryBackend):
             if after is not None:
                 result += after
 
-            # adding parenthesis here in case 2 rules are aggregated together - ex: win_possible_applocker_bypass
-            # but does not work if count, where or other piped statements...
-            if '|' in result:
-                return result
-            else:
-                return result
+            return result
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -190,7 +179,7 @@ class SumoLogicBackend(SingleTextQueryBackend):
         key, value = node
         if key in self.allowedFieldsList:
             if key in ["_sourceCategory", "_sourceName"]:
-                value = "*%s*" % value.lower()
+                value = f"*{value.lower()}*"
                 return self.mapExpression % (key, value)
             elif not self.mapListsSpecialHandling and type(value) in (
                     str, int, list) or self.mapListsSpecialHandling and type(value) in (str, int):
@@ -203,42 +192,43 @@ class SumoLogicBackend(SingleTextQueryBackend):
             elif value is None:
                 return self.nullExpression % (key, )
             else:
-                raise TypeError("Backend does not support map values of type " + str(type(value)))
-        else:
-            if not self.mapListsSpecialHandling and type(value) in (
+                raise TypeError(
+                    f"Backend does not support map values of type {str(type(value))}"
+                )
+
+        elif not self.mapListsSpecialHandling and type(value) in (
                     str, int, list) or self.mapListsSpecialHandling and type(value) in (str, int):
-                if type(value) is str:
-                    new_value = list()
-                    value = self.cleanNode(value)
-                    if type(value) == list:
-                        new_value.append(self.andToken.join([self.cleanValue(val) for val in value]))
-                    else:
-                        new_value.append(value)
-                    if len(new_value) == 1:
-                        if self.generateANDNode(new_value):
-                            return self.generateANDNode(new_value)
-                        else:
-                            # if after cleaning node, it is empty but there is AND statement... make it true.
-                            return "true"
-                    else:
-                        return self.generateORNode(new_value)
-                else:
-                    return self.generateValueNode(value)
-            elif type(value) is list:
-                new_value = list()
-                for item in value:
-                    item = self.cleanNode(item)
-                    if type(item) is list and len(item) == 1:
-                        new_value.append(item[0])
-                    elif type(item) is list:
-                        new_value.append(self.andToken.join([self.cleanValue(val) for val in item]))
-                    else:
-                        new_value.append(item)
-                return self.generateORNode(new_value)
-            elif value is None:
-                return self.nullExpression % (key, )
+            if type(value) is not str:
+                return self.generateValueNode(value)
+            new_value = []
+            value = self.cleanNode(value)
+            if type(value) == list:
+                new_value.append(self.andToken.join([self.cleanValue(val) for val in value]))
             else:
-                raise TypeError("Backend does not support map values of type " + str(type(value)))
+                new_value.append(value)
+            return (
+                self.generateANDNode(new_value) or "true"
+                if len(new_value) == 1
+                else self.generateORNode(new_value)
+            )
+
+        elif type(value) is list:
+            new_value = []
+            for item in value:
+                item = self.cleanNode(item)
+                if type(item) is list and len(item) == 1:
+                    new_value.append(item[0])
+                elif type(item) is list:
+                    new_value.append(self.andToken.join([self.cleanValue(val) for val in item]))
+                else:
+                    new_value.append(item)
+            return self.generateORNode(new_value)
+        elif value is None:
+            return self.nullExpression % (key, )
+        else:
+            raise TypeError(
+                f"Backend does not support map values of type {str(type(value))}"
+            )
 
     # from mixins.py
     # input in simple quotes are not passing through this function. ex: rules/windows/sysmon/sysmon_vul_java_remote_debugging.yml, rules/apt/apt_sofacy_zebrocy.yml
@@ -257,35 +247,35 @@ class SumoLogicBackend(SingleTextQueryBackend):
         if type(node) is int:
             return cV
         if type(cV) is list:
-            return "(%s)" % "AND".join([self.cleanValue(item) for item in cV])
+            return f'({"AND".join([self.cleanValue(item) for item in cV])})'
         if 'AND' in node and cV:
-            return "(" + cV + ")"
+            return f"({cV})"
         elif isinstance(node, str) and node.startswith('"') and node.endswith('"'):
             return cV
         else:
             return self.cleanValue(cV)
 
     def generateMapItemListNode(self, key, value):
-        itemslist = list()
+        itemslist = []
         for item in value:
             if key in self.allowedFieldsList:
-                itemslist.append('%s = %s' % (key, self.generateValueNode(item, key)))
+                itemslist.append(f'{key} = {self.generateValueNode(item, key)}')
             else:
-                itemslist.append('%s' % (self.generateValueNode(item)))
+                itemslist.append(f'{self.generateValueNode(item)}')
         return "(" + " OR ".join(itemslist) + ")"
 
     # generateORNode algorithm for SumoLogicBackend class.
     def generateORNode(self, node):
         if type(node) == ConditionOR and all(isinstance(item, str) for item in node):
-            new_value = list()
+            new_value = []
             for value in node:
                 value = self.cleanNode(value)
                 if type(value) is list:
                     new_value.append(self.andToken.join([self.valueExpression % val for val in value]))
                 else:
                     new_value.append(value)
-            return "(" + self.orToken.join([self.generateNode(val) for val in new_value]) + ")"
-        return "(" + self.orToken.join([self.generateNode(val) for val in node]) + ")"
+            return f"({self.orToken.join([self.generateNode(val) for val in new_value])})"
+        return f"({self.orToken.join([self.generateNode(val) for val in node])})"
 
 
 class SumoLogicCSE(SumoLogicBackend):
@@ -340,13 +330,16 @@ class SumoLogicCSE(SumoLogicBackend):
             elif value is None:
                 return self.nullExpression % (key,)
             else:
-                raise TypeError("Backend does not support map values of type " + str(type(value)))
+                raise TypeError(
+                    f"Backend does not support map values of type {str(type(value))}"
+                )
+
         raise TypeError("Backend does not support query without key.")
 
     def generateMapItemListNode(self, key, value):
         if len(value) == 1:
             return self.mapExpression % (key, value[0])
-        return "%s IN (%s)" % (key, ", ".join([self.cleanValue(item, key) for item in value]))
+        return f'{key} IN ({", ".join([self.cleanValue(item, key) for item in value])})'
 
 
 class SumoLogicCSERule(SumoLogicCSE):
@@ -375,12 +368,11 @@ class SumoLogicCSERule(SumoLogicCSE):
     def _load_mitre_file(self, mitre_type):
         try:
             backend_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "config", "mitre"))
-            path = os.path.join(backend_dir, "{}.json".format(mitre_type))
+            path = os.path.join(backend_dir, f"{mitre_type}.json")
             with open(path) as config_file:
-                config = json.load(config_file)
-                return config
+                return json.load(config_file)
         except (IOError, OSError) as e:
-            print("Failed to open {} configuration file '%s': %s".format(path, str(e)), file=sys.stderr)
+            print(f"Failed to open {path} configuration file '%s': %s", file=sys.stderr)
             return []
         except json.JSONDecodeError as e:
             print("Failed to parse {} configuration file '%s' as valid YAML: %s" % (path, str(e)), file=sys.stderr)
@@ -406,13 +398,11 @@ class SumoLogicCSERule(SumoLogicCSE):
         return sorted(tactics), sorted(technics)
 
     def parse_severity(self, old_severity):
-        if old_severity.lower() == "critical":
-            return "high"
-        return old_severity
+        return "high" if old_severity.lower() == "critical" else old_severity
 
     def get_tactics_and_techniques(self, tags):
-        tactics = list()
-        technics = list()
+        tactics = []
+        technics = []
 
         for tag in tags:
             tag = tag.replace("attack.", "")
@@ -447,28 +437,27 @@ class SumoLogicCSERule(SumoLogicCSE):
         tactics = list(map(lambda s: s.replace(" ", ""), tactics))
         score = self.map_risk_score(config.get("level", "medium"))
         rule = {
-            "name": "{} by {}".format(config.get("title"), config.get('author')),
-            "description": "{} {}".format(config.get("description"), "Technique: {}.".format(",".join(technics))),
+            "name": f"""{config.get("title")} by {config.get('author')}""",
+            "description": f'{config.get("description")} Technique: {",".join(technics)}.',
             "enabled": True,
-            "expression": """{}""".format(config.get("translation", "")),
+            "expression": f"""{config.get("translation", "")}""",
             "assetField": "device_hostname",
             "score": score,
-            "stream": "record"
+            "stream": "record",
         }
+
         if tactics and tactics[0] in self.allowedCategories:
-            rule.update({"category": tactics[0]})
+            rule["category"] = tactics[0]
         else:
-            rule.update({"category": "Unknown/Other"})
+            rule["category"] = "Unknown/Other"
         self.results.append(rule)
         #return json.dumps(rule, indent=4, sort_keys=False)
 
     def generate(self, sigmaparser):
-        translation = super().generate(sigmaparser)
-        if translation:
+        if translation := super().generate(sigmaparser):
             configs = sigmaparser.parsedyaml
             configs.update({"translation": translation})
-            rule = self.create_rule(configs)
-            return rule
+            return self.create_rule(configs)
         else:
             raise NotSupportedError("No table could be determined from Sigma rule")
 

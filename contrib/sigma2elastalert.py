@@ -86,9 +86,7 @@ def return_json_obj(x,custom_query_keys):
         except:
             pass
     out = list(out)
-    count = 0
-    for qk in custom_query_keys:
-        count += 1
+    for count, qk in enumerate(custom_query_keys, start=1):
         out.insert(count-1, qk)
     return out
 
@@ -111,9 +109,7 @@ def rule_element(file_content, elements):
             element_output = yaml.safe_load(file_content.replace("---",""))[e]
         except:
             pass
-    if element_output is None:
-        return ""
-    return element_output
+    return "" if element_output is None else element_output
 
 def get_rule_as_esqs(file):
     """
@@ -132,9 +128,7 @@ def get_rule_as_esqs(file):
     # Remove empty string from \n
     output = [a for a in output if a]
     # Handle case of multiple queries returned
-    if len(output) > 1:
-        return " OR ".join(output)
-    return "".join(output)
+    return " OR ".join(output) if len(output) > 1 else "".join(output)
 
 # Dictionary that contains args set at launch time
 convert_args = {
@@ -145,10 +139,10 @@ convert_args = {
     "MINUTES": args.realerttime
 }
 
-for file in glob.glob(args.ruledir + "/*"):
+for file in glob.glob(f"{args.ruledir}/*"):
     output_elast_config = template
     try:
-        print("Processing %s ..." % file)
+        print(f"Processing {file} ...")
         with open(file, "rb") as f:
             file_content = f.read()
 
@@ -162,12 +156,11 @@ for file in glob.glob(args.ruledir + "/*"):
             output_elast_config = re.sub(entry, str(convert_args[entry]), output_elast_config)
         for entry in translate_func:
             output_elast_config = re.sub(entry, translate_func[entry], output_elast_config)
-        print("Converting file " + file)
+        print(f"Converting file {file}")
         with open(os.path.join(args.outdir, "sigma-" + file.split("/")[-1]), "w") as f:
                 f.write(output_elast_config)
     except Exception as e:
         if args.debug:
             traceback.print_exc()
-        print("error " + str(file) + "----" + str(e))
-        pass
+        print(f"error {str(file)}----{str(e)}")
 

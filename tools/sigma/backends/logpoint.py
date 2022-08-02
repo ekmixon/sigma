@@ -44,11 +44,12 @@ class LogPointBackend(SingleTextQueryBackend):
     mapListValueExpression = "%s IN %s"
 
     def generateAggregation(self, agg):
-        if agg == None:
+        if agg is None:
             return ""
         if agg.aggfunc == sigma.parser.condition.SigmaAggregationParser.AGGFUNC_NEAR:
             raise NotImplementedError("The 'near' aggregation operator is not yet implemented for this backend")
-        if agg.groupfield == None:
-            return " | chart %s(%s) as val | search val %s %s" % (agg.aggfunc_notrans, agg.aggfield or "", agg.cond_op, agg.condition)
+        if agg.groupfield is None:
+            return f' | chart {agg.aggfunc_notrans}({agg.aggfield or ""}) as val | search val {agg.cond_op} {agg.condition}'
+
         else:
-            return " | chart %s(%s) as val by %s | search val %s %s" % (agg.aggfunc_notrans, agg.aggfield or "", agg.groupfield or "", agg.cond_op, agg.condition)
+            return f' | chart {agg.aggfunc_notrans}({agg.aggfield or ""}) as val by {agg.groupfield or ""} | search val {agg.cond_op} {agg.condition}'

@@ -184,7 +184,9 @@ class BaseBackend:
         elif isinstance(node, SigmaTypeModifier):
             return self.applyOverrides(self.generateTypedValueNode(node))
         else:
-            raise TypeError("Node type %s was not expected in Sigma parse tree" % (str(type(node))))
+            raise TypeError(
+                f"Node type {str(type(node))} was not expected in Sigma parse tree"
+            )
 
     def generateValueAsIsNode(self, node):
         raise NotImplementedError("Node type not implemented for this backend")
@@ -271,8 +273,7 @@ class SingleTextQueryBackend(RulenameCommentMixin, BaseBackend, QuoteCharMixin):
 
     def generateANDNode(self, node):
         generated = [ self.generateNode(val) for val in node ]
-        filtered = [ g for g in generated if g is not None ]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             if self.sort_condition_lists:
                 filtered = sorted(filtered)
             return self.andToken.join(filtered)
@@ -281,8 +282,7 @@ class SingleTextQueryBackend(RulenameCommentMixin, BaseBackend, QuoteCharMixin):
 
     def generateORNode(self, node):
         generated = [ self.generateNode(val) for val in node ]
-        filtered = [ g for g in generated if g is not None ]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             if self.sort_condition_lists:
                 filtered = sorted(filtered)
             return self.orToken.join(filtered)
@@ -291,24 +291,17 @@ class SingleTextQueryBackend(RulenameCommentMixin, BaseBackend, QuoteCharMixin):
 
     def generateNOTNode(self, node):
         generated = self.generateNode(node.item)
-        if generated is not None:
-            return self.notToken + generated
-        else:
-            return None
+        return self.notToken + generated if generated is not None else None
 
     def generateSubexpressionNode(self, node):
         generated = self.generateNode(node.items)
-        if 'len'in dir(node.items): # fix the "TypeError: object of type 'NodeSubexpression' has no len()"
-            if len(node.items) == 1:
-                # A sub expression with length 1 is not a proper sub expression, no self.subExpression required
-                return generated
-        if generated:
-            return self.subExpression % generated
-        else:
-            return None
+        if 'len' in dir(node.items) and len(node.items) == 1:
+            # A sub expression with length 1 is not a proper sub expression, no self.subExpression required
+            return generated
+        return self.subExpression % generated if generated else None
 
     def generateListNode(self, node):
-        if not set([type(value) for value in node]).issubset({str, int}):
+        if not {type(value) for value in node}.issubset({str, int}):
             raise TypeError("List values must be strings or numbers")
         result = [self.generateNode(value) for value in node]
         if len(result) == 1:
@@ -329,7 +322,9 @@ class SingleTextQueryBackend(RulenameCommentMixin, BaseBackend, QuoteCharMixin):
         elif value is None:
             return self.nullExpression % (transformed_fieldname, )
         else:
-            raise TypeError("Backend does not support map values of type " + str(type(value)))
+            raise TypeError(
+                f"Backend does not support map values of type {str(type(value))}"
+            )
 
     def generateMapItemListNode(self, fieldname, value):
         return self.mapListValueExpression % (fieldname, self.generateNode(value))
@@ -344,7 +339,9 @@ class SingleTextQueryBackend(RulenameCommentMixin, BaseBackend, QuoteCharMixin):
         try:
             return self.typedValueExpression[type(node)] % (str(node))
         except KeyError:
-            raise NotImplementedError("Type modifier '{}' is not supported by backend".format(node.identifier))
+            raise NotImplementedError(
+                f"Type modifier '{node.identifier}' is not supported by backend"
+            )
 
     def generateNULLValueNode(self, node):
         return self.nullExpression % (node.item)

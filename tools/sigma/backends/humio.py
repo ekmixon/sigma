@@ -55,50 +55,43 @@ class HumioBackend(SingleTextQueryBackend):
 
     def generateNOTNode(self, node):
         generated = self.generateNode(node.item)
-        if generated is not None:
-            return "%s(%s)" % (self.notToken, generated)
-        else:
-            return None
+        return f"{self.notToken}({generated})" if generated is not None else None
 
     def generateANDNode(self, node):
         generated = [self.generateNode(val) for val in node]
-        filtered = [g for g in generated if g is not None]
-        if filtered:
-            if self.sort_condition_lists:
-                filtered = sorted(filtered)
-            if any([item for item in filtered if "regex" in item]):
-                res = ""
-                for item in filtered:
-                    if item.startswith("regex"):
-                        if res.endswith(" | "):
-                            res = res.rstrip(" | ")
-                        res += " | %s | " % item.strip(" | ")
-                    else:
-                        res += item
-                return res.strip(" | ")
-            return self.andToken.join(filtered)
-        else:
+        if not (filtered := [g for g in generated if g is not None]):
             return None
+        if self.sort_condition_lists:
+            filtered = sorted(filtered)
+        if any(item for item in filtered if "regex" in item):
+            res = ""
+            for item in filtered:
+                if item.startswith("regex"):
+                    if res.endswith(" | "):
+                        res = res.rstrip(" | ")
+                    res += f' | {item.strip(" | ")} | '
+                else:
+                    res += item
+            return res.strip(" | ")
+        return self.andToken.join(filtered)
 
     def generateORNode(self, node):
         generated = [self.generateNode(val) for val in node]
-        filtered = [g.strip(" | ") for g in generated if g is not None]
-        if filtered:
-            if self.sort_condition_lists:
-                filtered = sorted(filtered)
-            if any([item for item in filtered if "regex" in item]):
-                res = ""
-                for item in filtered:
-                    if item.startswith("regex"):
-                        if res.endswith(" | "):
-                            res = res.rstrip(" | ")
-                        res += " | %s | " % item.strip(" | ")
-                    else:
-                        res += item
-                return res.strip(" | ")
-            return self.orToken.join(filtered)
-        else:
+        if not (filtered := [g.strip(" | ") for g in generated if g is not None]):
             return None
+        if self.sort_condition_lists:
+            filtered = sorted(filtered)
+        if any(item for item in filtered if "regex" in item):
+            res = ""
+            for item in filtered:
+                if item.startswith("regex"):
+                    if res.endswith(" | "):
+                        res = res.rstrip(" | ")
+                    res += f' | {item.strip(" | ")} | '
+                else:
+                    res += item
+            return res.strip(" | ")
+        return self.orToken.join(filtered)
 
     def cleanValue(self, val):
         if isinstance(val, SigmaRegularExpressionModifier):
@@ -115,9 +108,9 @@ class HumioBackend(SingleTextQueryBackend):
             return {'regexp': {key_mapped: str(value)}}
         # if any([item for item in value if "*" in item]):
         #     return (" | " + " | ".join([self.regexExpression % (key, self.cleanValue(item)) for item in value]) + " | ")
-        if not set([type(val) for val in value]).issubset({str, int}):
+        if not {type(val) for val in value}.issubset({str, int}):
             raise TypeError("List values must be strings or numbers")
-        return " or ".join(['%s=%s' % (key, self.generateValueNode(item)) for item in value])
+        return " or ".join([f'{key}={self.generateValueNode(item)}' for item in value])
 
     def generateAggregation(self, agg):
         if agg is None:
@@ -126,18 +119,20 @@ class HumioBackend(SingleTextQueryBackend):
             raise NotImplementedError("The 'near' aggregation operator is not yet implemented for this backend")
         if agg.groupfield is None:
             if agg.aggfunc_notrans == 'count':
-                if agg.aggfield is None :
-                    return " | val := count() | val %s %s" % (agg.cond_op, agg.condition)
+                if agg.aggfield is None:
+                    return f" | val := count() | val {agg.cond_op} {agg.condition}"
                 else:
                     agg.aggfunc_notrans = 'dc'
-            return " | count(field=%s, distinct=true, as=val) | val %s %s" % (agg.aggfield or "", agg.cond_op, agg.condition)
+            return f' | count(field={agg.aggfield or ""}, distinct=true, as=val) | val {agg.cond_op} {agg.condition}'
+
         else:
             if agg.aggfunc_notrans == 'count':
-                if agg.aggfield is None :
-                    return " | val := count(field=%s) | val %s %s" % (agg.groupfield or "", agg.cond_op, agg.condition)
+                if agg.aggfield is None:
+                    return f' | val := count(field={agg.groupfield or ""}) | val {agg.cond_op} {agg.condition}'
+
                 else:
                     agg.aggfunc_notrans = 'dc'
-            return " | groupby(field=%s, function=count(field=%s, distinct=true, as=val)) | val %s %s" % (agg.groupfield or "", agg.aggfield or "", agg.cond_op, agg.condition)
+            return f' | groupby(field={agg.groupfield or ""}, function=count(field={agg.aggfield or ""}, distinct=true, as=val)) | val {agg.cond_op} {agg.condition}'
 
         
     def generate(self, sigmaparser):

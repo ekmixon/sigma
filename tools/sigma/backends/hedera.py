@@ -82,7 +82,9 @@ class HederaBackend(SingleTextQueryBackend):
         elif type(node) == list:
             return self.generateListNode(node)
         else:
-            raise TypeError("Node type %s was not expected in Sigma parse tree" % (str(type(node))))
+            raise TypeError(
+                f"Node type {str(type(node))} was not expected in Sigma parse tree"
+            )
 
     def generateQuery(self, parsed, sigmaparser):
         result = self.generateNode(parsed.parsedSearch)
@@ -99,7 +101,7 @@ class HederaBackend(SingleTextQueryBackend):
     def generateMapItemNode(self, node):
         key, value = node
         if self.mapListsSpecialHandling == False and type(value) in (str, int, list) or self.mapListsSpecialHandling == True and type(value) in (str, int):
-            
+
             if key in ("LogName","source"):
                 self.logname = value
             elif key in ("EventID","x.Key"):
@@ -107,10 +109,12 @@ class HederaBackend(SingleTextQueryBackend):
                 return self.mapExpression % (key, self.generateValueNode(value, True))
             elif (type(value) == str and "\"" in value) or (type(value) == str and "*" in value) or (type(value) == str and "?" in value):
                 value = value.replace("\"", "\"\"").replace("*", ".*").replace("?","\?")
-                return "new Regex(@%s, RegexOptions.IgnoreCase).IsMatch(x.Value)" % (self.generateValueNode(key +".*"+ value, True))
-            
+                return f'new Regex(@{self.generateValueNode(f"{key}.*{value}", True)}, RegexOptions.IgnoreCase).IsMatch(x.Value)'
+
+
             elif type(value) in (str, int):
-                return "new Regex(@%s, RegexOptions.IgnoreCase).IsMatch(x.Value)" % (self.generateValueNode(key +".*"+ str(value), True))
+                return f'new Regex(@{self.generateValueNode(f"{key}.*{str(value)}", True)}, RegexOptions.IgnoreCase).IsMatch(x.Value)'
+
             else:
                 return self.mapExpression % (key, self.generateNode(value))
         elif type(value) == list:
@@ -118,29 +122,36 @@ class HederaBackend(SingleTextQueryBackend):
         elif value is None:
             return self.nullExpression % (key, )
         else:
-            raise TypeError("Backend does not support map values of type " + str(type(value)))
+            raise TypeError(
+                f"Backend does not support map values of type {str(type(value))}"
+            )
 
     def generateMapItemListNode(self, key, value):
-        itemslist = list()
+        itemslist = []
         for item in value:
-          
+              
             if key in ("EventID","x.Key"):               
                 key = "x.Key"
                 itemslist.append(self.mapExpression % (key, self.generateValueNode(item, True)))
-            
+
             elif (type(item) == str and "\"" in item) or (type(item) == str and "*" in item) or (type(item) == str and "?" in item):
                 item = item.replace("\"", "\"\"").replace("*", ".*").replace("?","\?")
-                itemslist.append("new Regex(@%s, RegexOptions.IgnoreCase).IsMatch(x.Value)" % (self.generateValueNode(key +".*"+ item, True)))                    
+                itemslist.append(
+                    f'new Regex(@{self.generateValueNode(f"{key}.*{item}", True)}, RegexOptions.IgnoreCase).IsMatch(x.Value)'
+                )
+                                    
 
             else:
-                itemslist.append("new Regex(@%s, RegexOptions.IgnoreCase).IsMatch(x.Value)" % (self.generateValueNode(key +".*"+ item, True)))  
-         
+                itemslist.append(
+                    f'new Regex(@{self.generateValueNode(f"{key}.*{item}", True)}, RegexOptions.IgnoreCase).IsMatch(x.Value)'
+                )
+                  
+
         return '('+" | ".join(itemslist)+')'
 
     def generateANDNode(self, node):
         generated = [ self.generateNode(val) for val in node ]
-        filtered = [ g for g in generated if g is not None ]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             return self.andToken.join(filtered)
         else:
             return None

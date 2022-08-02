@@ -75,22 +75,20 @@ class SysmonConfigBackend(SingleTextQueryBackend, MultiRuleOutputMixin):
         return super().__init__(*args, **kwargs)
 
     def cleanValue(self, value):
-        val = re.sub("[*]", "", value)
-        return val
+        return re.sub("[*]", "", value)
 
     def mapFiledValue(self, field, value):
         condition = None
         any_selector = "contains any"
         if "|" in field:
             field, *pipes = field.split("|")
-            if len(pipes) == 1:
-                modifier = pipes[0]
-                if modifier in self.conditionDict:
-                    condition = self.conditionDict[modifier]
-                if modifier == "all":
-                    any_selector = "contains all"
-            else:
+            if len(pipes) != 1:
                 raise NotImplementedError("not implemented condition")
+            modifier = pipes[0]
+            if modifier in self.conditionDict:
+                condition = self.conditionDict[modifier]
+            if modifier == "all":
+                any_selector = "contains all"
         if isinstance(value, list) and len(value) > 1:
             condition = any_selector
             value = ";".join(value)
@@ -104,14 +102,15 @@ class SysmonConfigBackend(SingleTextQueryBackend, MultiRuleOutputMixin):
             else:
                 condition = "contains"
 
-        if condition:
-            field_str = '<{field} condition="{condition}">{value}</{field}>'.format(field=field,
-                                                                                    condition=condition,
-                                                                                    value=self.cleanValue(value))
-        else:
-            field_str = '<{field}>{value}</{field}>'.format(field=field, value=self.cleanValue(value))
-
-        return field_str
+        return (
+            '<{field} condition="{condition}">{value}</{field}>'.format(
+                field=field, condition=condition, value=self.cleanValue(value)
+            )
+            if condition
+            else '<{field}>{value}</{field}>'.format(
+                field=field, value=self.cleanValue(value)
+            )
+        )
 
     def createRule(self, selections):
         fields_list = []
@@ -129,8 +128,14 @@ class SysmonConfigBackend(SingleTextQueryBackend, MultiRuleOutputMixin):
                 fields_list.append(created_field_value)
         fields_list_filtered = [item for item in fields_list if item]
         if any(fields_list_filtered):
-            rule = '''\n\t\t<Rule name="{rule_name}" groupRelation="and">\n\t\t\t{fields}\n\t\t</Rule>'''.format(rule_name=self.rule_name, fields="\n\t\t\t".join(["{}".format(item) for item in fields_list_filtered]))
-            t = table if table else self.table
+            rule = '''\n\t\t<Rule name="{rule_name}" groupRelation="and">\n\t\t\t{fields}\n\t\t</Rule>'''.format(
+                rule_name=self.rule_name,
+                fields="\n\t\t\t".join(
+                    [f"{item}" for item in fields_list_filtered]
+                ),
+            )
+
+            t = table or self.table
             return rule, t
         else:
             return None, None
@@ -141,43 +146,43 @@ class SysmonConfigBackend(SingleTextQueryBackend, MultiRuleOutputMixin):
         if len(rules_selections) == 1:
             rule, table = self.createRule(self.detection.get(rules_selections[0].matched))
             rules = {match_type: {table: rule}}
-        else:
-            if "or" in condition.lower():
-                result = {}
-                for selection_object in rules_selections:
-                    rule, table = self.createRule(self.detection.get(selection_object.matched))
-                    if result.get(table):
-                        result[table].append(rule)
-                    else:
-                        result[table] = [rule]
-                result = {table_name: "\n\t\t".join(rules_list) for table_name, rules_list in result.items()}
-                rules = {match_type: result}
-            elif "and" in condition.lower():
-                rules_dict = {}
-                for selection_object in rules_selections:
-                    rules_dict.update(self.detection.get(selection_object.matched))
-                rule, table = self.createRule(rules_dict)
-                rules = {match_type: {table: rule}}
-        if rules:
-            rules_result = []
-            for match, tables in rules.items():
-                for table, rules in tables.items():
-                    category_comment = '\n<!--Insert This Rule in <{} onmatch="{}"> section -->\n{}'.format(table, match,
-                                                                                                            "".join(rules))
-                    rules_result.append(category_comment)
-            return "".join(rules_result)
-        else:
+        elif "or" in condition.lower():
+            result = {}
+            for selection_object in rules_selections:
+                rule, table = self.createRule(self.detection.get(selection_object.matched))
+                if result.get(table):
+                    result[table].append(rule)
+                else:
+                    result[table] = [rule]
+            result = {table_name: "\n\t\t".join(rules_list) for table_name, rules_list in result.items()}
+            rules = {match_type: result}
+        elif "and" in condition.lower():
+            rules_dict = {}
+            for selection_object in rules_selections:
+                rules_dict |= self.detection.get(selection_object.matched)
+            rule, table = self.createRule(rules_dict)
+            rules = {match_type: {table: rule}}
+        if not rules:
             raise NotSupportedError("Couldn't create rule with current condition.")
+        rules_result = []
+        for match, tables in rules.items():
+            for table, rules in tables.items():
+                category_comment = f'\n<!--Insert This Rule in <{table} onmatch="{match}"> section -->\n{"".join(rules)}'
+
+                rules_result.append(category_comment)
+        return "".join(rules_result)
 
     def createMultiRuleGroup(self, conditions):
         conditions_id = "".join([str(item.type) for item in conditions])
         or_index = conditions_id.index("2")
-        sorted_conditions = [conditions[:or_index], conditions[or_index+1:]]
-        if sorted_conditions:
+        if sorted_conditions := [
+            conditions[:or_index],
+            conditions[or_index + 1 :],
+        ]:
             result = ""
             for rule_condition in sorted_conditions:
                 rule = self.createRuleGroup(condition_objects=rule_condition, condition=" ".join([item.matched for item in rule_condition]))
-                result += "{}\n".format(rule)
+                result += f"{rule}\n"
             return result
         else:
             raise NotSupportedError("Not implemented condition.")
@@ -196,32 +201,31 @@ class SysmonConfigBackend(SingleTextQueryBackend, MultiRuleOutputMixin):
             result = ""
             for rule_condition in sorted_conditions:
                 rule = self.createRuleGroup(condition_objects=rule_condition[0], condition=" ".join([item.matched for item in rule_condition[0]]), match_type=rule_condition[1])
-                result += "{}\n".format(rule)
+                result += f"{rule}\n"
             return result
 
     def checkRuleCondition(self, condtokens):
         if len(condtokens) == 1:
-            conditions = [item for item in condtokens[0].tokens]
-            conditions_combination = list(set([item.type for item in conditions]))
+            conditions = list(condtokens[0].tokens)
+            conditions_combination = list({item.type for item in conditions})
             for rule_type, combinations in self.allowedCondCombinations.items():
                 for combination in combinations:
                     if sorted(conditions_combination) == sorted(combination):
                         return rule_type, conditions
-            else:
-                raise NotSupportedError("Not supported condition.")
-        else:
-            raise NotSupportedError("Not supported condition.")
+        raise NotSupportedError("Not supported condition.")
 
     def createTableFromLogsource(self):
         if self.logsource.get("product", "") not in ("linux","windows"):
             raise NotSupportedError(
                 "Not supported logsource. Should be product `linux` or `windows`.")
-        for item in self.logsource.values():
-            if str(item).lower() in self.allowedSource.keys():
-                self.table = self.allowedSource.get(item.lower())
-                break
-        else:
-            self.table = "ProcessCreate"
+        self.table = next(
+            (
+                self.allowedSource.get(item.lower())
+                for item in self.logsource.values()
+                if str(item).lower() in self.allowedSource.keys()
+            ),
+            "ProcessCreate",
+        )
 
     def checkDetection(self):
         for selection_name, value in self.detection.items():
@@ -233,7 +237,7 @@ class SysmonConfigBackend(SingleTextQueryBackend, MultiRuleOutputMixin):
         sysmon_rule = None
         title = sigmaparser.parsedyaml.get("title", "")
         author = sigmaparser.parsedyaml.get("author", {})
-        self.rule_name = "{} by {}".format(title, author)
+        self.rule_name = f"{title} by {author}"
         self.detection = sigmaparser.parsedyaml.get("detection", {})
         self.checkDetection()
         self.logsource = sigmaparser.parsedyaml["logsource"]
@@ -248,4 +252,4 @@ class SysmonConfigBackend(SingleTextQueryBackend, MultiRuleOutputMixin):
 
         if sysmon_rule:
             rulegroup_comment = '<!--RuleGroup groupRelation should be `or` <RuleGroup groupRelation="or"> -->'
-            return "{}\n{}".format(rulegroup_comment, sysmon_rule)
+            return f"{rulegroup_comment}\n{sysmon_rule}"

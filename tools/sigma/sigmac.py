@@ -86,7 +86,7 @@ class ActionBackendHelp(argparse.Action):
     def __call__(self, parser, ns, vals, opt):
         backend = backends.getBackend(vals)
         if len(backend.options) > 0:
-            helptext = "Backend options for " + backend.identifier + "\n"
+            helptext = f"Backend options for {backend.identifier}" + "\n"
             for option, default, help, _ in backend.options:
                 helptext += "    {:10}: {} (default: {})".format(option, help, default) + "\n"
 
@@ -167,7 +167,7 @@ def get_fileName_after_date(inputs, recurse, date):
                 continue;
 
         if not modifiedstr and not datestr:
-            print("%s, No date" % sigmafile)
+            print(f"{sigmafile}, No date")
             continue
 
         if not modifiedstr:
@@ -175,7 +175,7 @@ def get_fileName_after_date(inputs, recurse, date):
 
         modified = time.mktime(datetime.datetime.strptime(modifiedstr, "%Y/%m/%d").timetuple())
         if modified > dateTime:
-            print("%s, Updated" % sigmafile)
+            print(f"{sigmafile}, Updated")
 
 def main():
     argparser = set_argparser()

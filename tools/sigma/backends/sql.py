@@ -54,52 +54,42 @@ class SQLBackend(SingleTextQueryBackend):
 
     def __init__(self, sigmaconfig, options):
         super().__init__(sigmaconfig)
-        
-        if "table" in options:
-            self.table = options["table"]
-        else:
-            self.table = "eventlog"
 
+        self.table = options["table"] if "table" in options else "eventlog"
         if "select" in options and options["select"]:
             self.select_fields = options["select"].split(',')
         else:
-            self.select_fields = list()
+            self.select_fields = []
 
         if "selection" in options:
             self.selection_enabled = True
 
     def generateANDNode(self, node):
         generated = [ self.generateNode(val) for val in node ]
-        filtered = [ g for g in generated if g is not None ]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             return self.andToken.join(filtered)
         else:
             return None
 
     def generateORNode(self, node):
         generated = [ self.generateNode(val) for val in node ]
-        filtered = [ g for g in generated if g is not None ]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             return self.orToken.join(filtered)
         else:
             return None
 
     def generateNOTNode(self, node):
         generated = self.generateNode(node.item)
-        if generated is not None:
-            return self.notToken + generated
-        else:
-            return None
+        return self.notToken + generated if generated is not None else None
 
     def generateSubexpressionNode(self, node):
-        generated = self.generateNode(node.items)
-        if generated:
+        if generated := self.generateNode(node.items):
             return self.subExpression % generated
         else:
             return None
 
     def generateListNode(self, node):
-        if not set([type(value) for value in node]).issubset({str, int}):
+        if not {type(value) for value in node}.issubset({str, int}):
             raise TypeError("List values must be strings or numbers")
         return self.listExpression % (self.listSeparator.join([self.generateNode(value) for value in node]))
 
@@ -126,7 +116,9 @@ class SQLBackend(SingleTextQueryBackend):
         elif has_wildcard:
             return self.mapWildcard % (transformed_fieldname, generated_value)
         else:
-            raise TypeError("Backend does not support map values of type " + str(type(value)))
+            raise TypeError(
+                f"Backend does not support map values of type {str(type(value))}"
+            )
 
     def generateMapItemListNode(self, key, value):
         return "(" + (" OR ".join([self.mapWildcard % (key, self.generateValueNode(item)) for item in value])) + ")"
@@ -150,7 +142,7 @@ class SQLBackend(SingleTextQueryBackend):
 
     def generate(self, sigmaparser):
         """Method is called for each sigma rule and receives the parsed rule (SigmaParser)"""
-        fields = list()
+        fields = []
 
         # First add fields specified in the rule
         try:
@@ -219,11 +211,13 @@ class SQLBackend(SingleTextQueryBackend):
         if not agg:
             return self.table, where_clausel
 
-        if  (agg.aggfunc == SigmaAggregationParser.AGGFUNC_COUNT or
-            agg.aggfunc == SigmaAggregationParser.AGGFUNC_MAX or
-            agg.aggfunc == SigmaAggregationParser.AGGFUNC_MIN or
-            agg.aggfunc == SigmaAggregationParser.AGGFUNC_SUM or
-            agg.aggfunc == SigmaAggregationParser.AGGFUNC_AVG):
+        if agg.aggfunc in [
+            SigmaAggregationParser.AGGFUNC_COUNT,
+            SigmaAggregationParser.AGGFUNC_MAX,
+            SigmaAggregationParser.AGGFUNC_MIN,
+            SigmaAggregationParser.AGGFUNC_SUM,
+            SigmaAggregationParser.AGGFUNC_AVG,
+        ]:
 
             if agg.groupfield:
                 group_by = " GROUP BY {0}".format(self.fieldNameMapping(agg.groupfield, None))
@@ -231,19 +225,25 @@ class SQLBackend(SingleTextQueryBackend):
                 group_by = ""
 
             if agg.aggfield:
-                select = "*,{}({}) AS agg".format(agg.aggfunc_notrans, self.fieldNameMapping(agg.aggfield, None))
-            else:
-                if agg.aggfunc == SigmaAggregationParser.AGGFUNC_COUNT:
-                    select = "*,{}(*) AS agg".format(agg.aggfunc_notrans)
-                else:
-                    raise SigmaParseError("For {} aggregation a fieldname needs to be specified".format(agg.aggfunc_notrans))
+                select = f"*,{agg.aggfunc_notrans}({self.fieldNameMapping(agg.aggfield, None)}) AS agg"
 
-            temp_table = "(SELECT {} FROM {} WHERE {}{})".format(select, self.table, where_clausel, group_by)
-            agg_condition =  "agg {} {}".format(agg.cond_op, agg.condition)
+            elif agg.aggfunc == SigmaAggregationParser.AGGFUNC_COUNT:
+                select = f"*,{agg.aggfunc_notrans}(*) AS agg"
+            else:
+                raise SigmaParseError(
+                    f"For {agg.aggfunc_notrans} aggregation a fieldname needs to be specified"
+                )
+
+
+            temp_table = f"(SELECT {select} FROM {self.table} WHERE {where_clausel}{group_by})"
+
+            agg_condition = f"agg {agg.cond_op} {agg.condition}"
 
             return temp_table, agg_condition
 
-        raise NotImplementedError("{} aggregation not implemented in SQL Backend".format(agg.aggfunc_notrans))
+        raise NotImplementedError(
+            f"{agg.aggfunc_notrans} aggregation not implemented in SQL Backend"
+        )
     
     def generateQuery(self, parsed):
         return self._generateQueryWithFields(parsed, list("*"))
@@ -266,9 +266,9 @@ class SQLBackend(SingleTextQueryBackend):
         if parsed.parsedAgg:
             #Handle aggregation
             fro, whe = self.generateAggregation(parsed.parsedAgg, result)
-            return "SELECT {} FROM {} WHERE {}".format(select, fro, whe)
+            return f"SELECT {select} FROM {fro} WHERE {whe}"
 
-        return "SELECT {} FROM {} WHERE {}".format(select, self.table, result)
+        return f"SELECT {select} FROM {self.table} WHERE {result}"
 
     def _recursiveFtsSearch(self, subexpression):
         #True: found subexpression, where no fieldname is requested -> full text search

@@ -88,10 +88,7 @@ class AzureLogAnalyticsBackend(SingleTextQueryBackend):
         self._fields = None
         self._agg_var = None
         self._has_logsource_event_cond = False
-        if not self.sysmon and not self.sigmaconfig.config:
-            self._field_map = {}#self._WIN_SECURITY_EVENT_MAP
-        else:
-            self._field_map = {}
+        self._field_map = {}#self._WIN_SECURITY_EVENT_MAP
 
     def map_sysmon_schema(self, eventid):
         schema_keys = []
@@ -102,12 +99,11 @@ class AzureLogAnalyticsBackend(SingleTextQueryBackend):
         root = tree.getroot()
         for child in root.iter('event'):
             if child.attrib['value'] == str(eventid):
-                for d in list(child):
-                    schema_keys.append(d.attrib["name"])
-        parse_arg = ''
-        for schema_key in schema_keys:
-            parse_arg += "'Data Name=\"{0}\">' {0} '<' * ".format(schema_key)
-        return parse_arg
+                schema_keys.extend(d.attrib["name"] for d in list(child))
+        return ''.join(
+            "'Data Name=\"{0}\">' {0} '<' * ".format(schema_key)
+            for schema_key in schema_keys
+        )
 
     def default_value_mapping(self, val):
         if isinstance(val, int):
@@ -117,11 +113,8 @@ class AzureLogAnalyticsBackend(SingleTextQueryBackend):
             if "*" in val[1:-1]:  # value contains * inside string - use regex match
                 op = "matches regex"
                 val = re.sub('(\\\\\*|\*)', '.*', val)
-                if "\\" in val:
-                    val = "@'(?i)%s'" % (val)
-                else:
-                    val = "'(?i)%s'" % (val)
-                return "%s %s" % (op, self.cleanValue(val))
+                val = "@'(?i)%s'" % (val) if "\\" in val else "'(?i)%s'" % (val)
+                return f"{op} {self.cleanValue(val)}"
             elif val.startswith("*") or val.endswith("*"):
                 if val.startswith("*") and val.endswith("*"):
                     op = "contains"
@@ -164,37 +157,36 @@ class AzureLogAnalyticsBackend(SingleTextQueryBackend):
             self.table = "AuditLogs"
         elif self.service and self.service.lower() == "azureactivity":
             self.table = "AzureActivity"
-        else:
-            if self.service:
-                if "-" in self.service:
-                    self.table = "-".join([item.capitalize() for item in self.service.split("-")])
-                elif "_" in self.service:
-                    self.table = "_".join([item.capitalize() for item in self.service.split("_")])
-                else:
-                    if self.service.islower() or self.service.isupper():
-                        self.table = self.service.capitalize()
-                    else:
-                        self.table = self.service
-            elif self.product:
-                if "-" in self.product:
-                    self.table = "-".join([item.capitalize() for item in self.product.split("-")])
-                elif "_" in self.product:
-                    self.table = "_".join([item.capitalize() for item in self.product.split("_")])
-                else:
-                    if self.product.islower() or self.product.isupper():
-                        self.table = self.product.capitalize()
-                    else:
-                        self.table = self.product
-            elif self.category:
-                if "-" in self.category:
-                    self.table = "-".join([item.capitalize() for item in self.category.split("-")])
-                elif "_" in self.category:
-                    self.table = "_".join([item.capitalize() for item in self.category.split("_")])
-                else:
-                    if self.category.islower() or self.category.isupper():
-                        self.table = self.category.capitalize()
-                    else:
-                        self.table = self.category
+        elif self.service:
+            if "-" in self.service:
+                self.table = "-".join([item.capitalize() for item in self.service.split("-")])
+            elif "_" in self.service:
+                self.table = "_".join([item.capitalize() for item in self.service.split("_")])
+            else:
+                self.table = (
+                    self.service.capitalize()
+                    if self.service.islower() or self.service.isupper()
+                    else self.service
+                )
+
+        elif self.product:
+            if "-" in self.product:
+                self.table = "-".join([item.capitalize() for item in self.product.split("-")])
+            elif "_" in self.product:
+                self.table = "_".join([item.capitalize() for item in self.product.split("_")])
+            elif self.product.islower() or self.product.isupper():
+                self.table = self.product.capitalize()
+            else:
+                self.table = self.product
+        elif self.category:
+            if "-" in self.category:
+                self.table = "-".join([item.capitalize() for item in self.category.split("-")])
+            elif "_" in self.category:
+                self.table = "_".join([item.capitalize() for item in self.category.split("_")])
+            elif self.category.islower() or self.category.isupper():
+                self.table = self.category.capitalize()
+            else:
+                self.table = self.category
 
     def generate(self, sigmaparser):
         try:
@@ -221,11 +213,9 @@ class AzureLogAnalyticsBackend(SingleTextQueryBackend):
             before = "%s | parse EventData with * %s | where EventID == \"%s\" | where " % (self.table, parse_string, self.eventid)
         elif self.sysmon:
             parse_string = self.map_sysmon_schema(self.eventid)
-            before = "%s | parse EventData with * %s | where " % (self.table, parse_string)
-        # elif self.category == "process_creation" and not self._has_logsource_event_cond:
-        #     before = "%s | where EventID == \"%s\" | where " % (self.table, self.eventid)
+            before = f"{self.table} | parse EventData with * {parse_string} | where "
         else:
-            before = "%s | where " % self.table
+            before = f"{self.table} | where "
         if parsed.parsedAgg != None and parsed.parsedAgg.aggfunc == SigmaAggregationParser.AGGFUNC_NEAR:
             window = parsed.parsedAgg.parser.parsedyaml["detection"].get("timeframe", "30m")
             before = """
@@ -241,20 +231,16 @@ class AzureLogAnalyticsBackend(SingleTextQueryBackend):
         """
         key, value = node
         key = self.fieldNameMapping(key, value)
-        if type(value) == list:         # handle map items with values list like multiple OR-chained conditions
-            return "(" + self.generateORNode(
-                    [(key, v) for v in value]
-                    ) + ")"
-        elif key == "EventID":            # EventIDs are not reflected in condition but in table selection
-            if self.service == "sysmon":
-                self.table = "SysmonEvent"
-                self.eventid = value
-            elif self.service == "powershell":
+        if type(value) == list: # handle map items with values list like multiple OR-chained conditions
+            return (f"({self.generateORNode([(key, v) for v in value])}" + ")")
+        elif key == "EventID":    # EventIDs are not reflected in condition but in table selection
+            if self.service in ["powershell", "system"]:
                 self.table = "Event"
             elif self.service == "security":
                 self.table = "SecurityEvent"
-            elif self.service == "system":
-                self.table = "Event"
+            elif self.service == "sysmon":
+                self.table = "SysmonEvent"
+                self.eventid = value
             return self.mapExpression % (key, value)
         elif type(value) in [SigmaTypeModifier, SigmaContainsModifier, SigmaRegularExpressionModifier, SigmaStartswithModifier, SigmaEndswithModifier]:
             return self.generateMapItemTypedNode(key, value)
@@ -273,12 +259,13 @@ class AzureLogAnalyticsBackend(SingleTextQueryBackend):
                     return mapping
                 elif callable(mapping):
                     return self.generateSubexpressionNode(
-                            self.generateANDNode(
-                                [cond for cond in mapping(key, self.cleanValue(value))]
-                                )
-                            )
+                        self.generateANDNode(
+                            list(mapping(key, self.cleanValue(value)))
+                        )
+                    )
+
             elif len(mapping) == 2:
-                result = list()
+                result = []
                 for mapitem, val in zip(mapping, node):     # iterate mapping and mapping source value synchronously over key and value
                     if type(mapitem) == str:
                         result.append(mapitem)
@@ -286,17 +273,19 @@ class AzureLogAnalyticsBackend(SingleTextQueryBackend):
                         result.append(mapitem(self.cleanValue(val)))
                 return "{} {}".format(*result)
             else:
-                raise TypeError("Backend does not support map values of type " + str(type(value)))
-        elif type(value) == list:
-            return self.generateMapItemListNode(key, value)
+                raise TypeError(
+                    f"Backend does not support map values of type {str(type(value))}"
+                )
 
         elif value is None:
             return self.nullExpression % (key, )
         else:
-            raise TypeError("Backend does not support map values of type " + str(type(value)))
+            raise TypeError(
+                f"Backend does not support map values of type {str(type(value))}"
+            )
 
     def generateMapItemTypedNode(self, fieldname, value):
-        return "%s %s" % (fieldname, self.generateTypedValueNode(value))
+        return f"{fieldname} {self.generateTypedValueNode(value)}"
 
     def generateTypedValueNode(self, node):
         try:
@@ -305,7 +294,9 @@ class AzureLogAnalyticsBackend(SingleTextQueryBackend):
                 val = re.sub('\\*', '.*', val)
             return self.typedValueExpression[type(node)] % (val)
         except KeyError:
-            raise NotImplementedError("Type modifier '{}' is not supported by backend".format(node.identifier))
+            raise NotImplementedError(
+                f"Type modifier '{node.identifier}' is not supported by backend"
+            )
 
     def generateAggregationQuery(self, agg, searchId):
         condtoken = SigmaConditionTokenizer(searchId)
@@ -368,22 +359,25 @@ class AzureLogAnalyticsBackend(SingleTextQueryBackend):
         if agg.aggfunc == SigmaAggregationParser.AGGFUNC_NEAR:
             if agg.exclude:
                 raise NotSupportedError("This backend doesn't currently support 'near' with excludes")
-            if self.tableAggJoinFields == None or self.tableAggTimeField == None:
+            if self.tableAggJoinFields is None or self.tableAggTimeField is None:
                 raise NotSupportedError("This backend doesn't currently support 'near' for this table")
             return self.generateNear(agg)
         if agg.aggfunc_notrans != 'count' and agg.aggfield is None:
             raise NotSupportedError(
-                "The '%s' aggregation operator " % agg.aggfunc_notrans
-                + "must have an aggregation field for the %s backend" % self.identifier
+                (
+                    "The '%s' aggregation operator " % agg.aggfunc_notrans
+                    + f"must have an aggregation field for the {self.identifier} backend"
+                )
             )
+
         if agg.aggfunc_notrans == 'count' and agg.aggfield is not None:
             agg_func = "dcount"
         else:
             agg_func = agg.aggfunc_notrans
 
-        self._agg_var = agg_func + ("_" + agg.aggfield) if agg.aggfield else "var"
+        self._agg_var = f"{agg_func}_{agg.aggfield}" if agg.aggfield else "var"
         if not self._fields:
-            by_clause = "by {grp}".format(grp=agg.groupfield if agg.groupfield else "")
+            by_clause = "by {grp}".format(grp=agg.groupfield or "")
         else:
             if agg.aggfield_notrans in self._fields:
                 self._fields.remove(agg.aggfield_notrans)
@@ -440,12 +434,11 @@ class AzureAPIBackend(AzureLogAnalyticsBackend):
     def _load_mitre_file(self, mitre_type):
         try:
             backend_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "config", "mitre"))
-            path = os.path.join(backend_dir, "{}.json".format(mitre_type))
+            path = os.path.join(backend_dir, f"{mitre_type}.json")
             with open(path) as config_file:
-                config = json.load(config_file)
-                return config
+                return json.load(config_file)
         except (IOError, OSError) as e:
-            print("Failed to open {} configuration file '%s': %s".format(path, str(e)), file=sys.stderr)
+            print(f"Failed to open {path} configuration file '%s': %s", file=sys.stderr)
             return []
         except json.JSONDecodeError as e:
             print("Failed to parse {} configuration file '%s' as valid YAML: %s" % (path, str(e)), file=sys.stderr)
@@ -474,13 +467,11 @@ class AzureAPIBackend(AzureLogAnalyticsBackend):
         return sorted(tactics), sorted(technics)
 
     def parse_severity(self, old_severity):
-        if old_severity.lower() == "critical":
-            return "high"
-        return old_severity
+        return "high" if old_severity.lower() == "critical" else old_severity
 
     def get_tactics_and_techniques(self, tags):
-        tactics = list()
-        technics = list()
+        tactics = []
+        technics = []
 
         for tag in tags:
             tag = tag.replace("attack.", "")
@@ -514,7 +505,7 @@ class AzureAPIBackend(AzureLogAnalyticsBackend):
         hours = delta.seconds // 3600 % 24 and "%dH" % (delta.seconds // 3600 % 24) or ""
         minutes = delta.seconds // 60 % 60 and "%dM" % (delta.seconds // 60 % 60) or ""
         seconds = delta.seconds % 60 and "%dS" % (delta.seconds % 60) or ""
-        return "P%sT%s%s%s" % (days, hours, minutes, seconds)
+        return f"P{days}T{hours}{minutes}{seconds}"
 
     def create_rule(self, config):
         tags = config.get("tags", [])
@@ -528,28 +519,27 @@ class AzureAPIBackend(AzureLogAnalyticsBackend):
         suppressionDuration = self.iso8601_duration(timeframe * 5)
 
         rule = {
-                "displayName": "{} by {}".format(config.get("title"), config.get('author')),
-                "description": "{} {}".format(config.get("description"), "Technique: {}.".format(",".join(technics))),
-                "severity": self.parse_severity(config.get("level", "medium")),
-                "enabled": True,
-                "query": config.get("translation"),
-                "queryFrequency": queryDuration,
-                "queryPeriod": queryDuration,
-                "triggerOperator": "GreaterThan",
-                "triggerThreshold": 0,
-                "suppressionDuration": suppressionDuration,
-                "suppressionEnabled": True,
-                "tactics": tactics
-            }
+            "displayName": f"""{config.get("title")} by {config.get('author')}""",
+            "description": f'{config.get("description")} Technique: {",".join(technics)}.',
+            "severity": self.parse_severity(config.get("level", "medium")),
+            "enabled": True,
+            "query": config.get("translation"),
+            "queryFrequency": queryDuration,
+            "queryPeriod": queryDuration,
+            "triggerOperator": "GreaterThan",
+            "triggerThreshold": 0,
+            "suppressionDuration": suppressionDuration,
+            "suppressionEnabled": True,
+            "tactics": tactics,
+        }
+
         return json.dumps(rule)
 
     def generate(self, sigmaparser):
-        translation = super().generate(sigmaparser)
-        if translation:
+        if translation := super().generate(sigmaparser):
             configs = sigmaparser.parsedyaml
             configs.update({"translation": translation})
-            rule = self.create_rule(configs)
-            return rule
+            return self.create_rule(configs)
         else:
             raise NotSupportedError("No table could be determined from Sigma rule")
 
@@ -562,8 +552,7 @@ class SentinelBackend(AzureAPIBackend):
         super().__init__(*args, **kwargs)
 
     def generate(self, sigmaparser):
-        translation = super().generate(sigmaparser)
-        if translation:
+        if translation := super().generate(sigmaparser):
             configs = sigmaparser.parsedyaml
             configs.update({"translation": translation})
             rule = self.create_sentinel_rule(configs)

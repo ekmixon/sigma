@@ -78,8 +78,8 @@ class MultiRuleOutputMixin:
         except KeyError:
             yaml_title = "No Title"
         yaml_title = yaml_title.replace(" ", "-").replace("(", "").replace(")", "")
-        
-        rulename = "%s-%s" % (yaml_id, yaml_title)
+
+        rulename = f"{yaml_id}-{yaml_title}"
         if rulename in self.rulenames:   # add counter if name collides
             cnt = 2
             while "%s-%d" % (rulename, cnt) in self.rulenames:

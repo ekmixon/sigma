@@ -175,7 +175,7 @@ class WindowsDefenderATPBackend(SingleTextQueryBackend):
         filtered = []
         for g in generated:
             if g and g.startswith("ActionType"):
-                if not any([i for i in filtered if i.startswith("ActionType")]):
+                if not any(i for i in filtered if i.startswith("ActionType")):
                     filtered.append(g)
                 else:
                     continue
@@ -201,17 +201,15 @@ class WindowsDefenderATPBackend(SingleTextQueryBackend):
                 val = re.sub('([".^$]|\\\\(?![*?]))', '\\\\\g<1>', val)
                 val = re.sub('\\*', '.*', val)
                 val = re.sub('\\?', '.', val)
-            else:
-                # value possibly only starts and/or ends with *, use prefix/postfix match
-                if val.endswith("*") and val.startswith("*"):
-                    op = "contains"
-                    val = self.cleanValue(val[1:-1])
-                elif val.endswith("*"):
-                    op = "startswith"
-                    val = self.cleanValue(val[:-1])
-                elif val.startswith("*"):
-                    op = "endswith"
-                    val = self.cleanValue(val[1:])
+            elif val.endswith("*") and val.startswith("*"):
+                op = "contains"
+                val = self.cleanValue(val[1:-1])
+            elif val.endswith("*"):
+                op = "startswith"
+                val = self.cleanValue(val[:-1])
+            elif val.startswith("*"):
+                op = "endswith"
+                val = self.cleanValue(val[1:])
 
         if "\\" in val:
             val = val.replace("\\\\","\\")
@@ -243,12 +241,10 @@ class WindowsDefenderATPBackend(SingleTextQueryBackend):
     def decompose_user(self, src_field, src_value):
         """Decompose domain\\user User field of Sysmon events into ATP InitiatingProcessAccountDomain and InititatingProcessAccountName."""
         reUser = re.compile("^(.*?)\\\\(.*)$")
-        m = reUser.match(src_value)
-        if m:
-            domain, user = m.groups()
-            return (("InitiatingProcessAccountDomain",  self.default_value_mapping(domain)), ("InititatingProcessAccountName",  self.default_value_mapping(user)))
-        else:   # assume only user name is given if backslash is missing
+        if not (m := reUser.match(src_value)):
             return (("InititatingProcessAccountName", self.default_value_mapping(src_value)))
+        domain, user = m.groups()
+        return (("InitiatingProcessAccountDomain",  self.default_value_mapping(domain)), ("InititatingProcessAccountName",  self.default_value_mapping(user)))
 
     def generate(self, sigmaparser):
         self.tables = []
@@ -301,22 +297,24 @@ class WindowsDefenderATPBackend(SingleTextQueryBackend):
     def generateBefore(self, parsed):
         if not any(self.tables):
             raise NotSupportedError("No MDATP table could be determined from Sigma rule")
-        # if self.tables in "DeviceEvents" and self.service == "powershell":
-        #     return "%s | where tostring(extractjson('$.Command', AdditionalFields)) in~ " % self.tables
         if len(self.tables) == 1:
-            if self.tables[0] == "DeviceEvents" and self.service == "powershell":
-                return "%s | where tostring(extractjson('$.Command', AdditionalFields)) in~ " % self.tables
-            return "%s | where " % self.tables[0]
-        else:
-            if "DeviceEvents" in self.tables and self.service == "powershell":
-                return "union %s | where tostring(extractjson('$.Command', AdditionalFields)) in~ " % ", ".join(self.tables)
-            return "union %s | where " % ", ".join(self.tables)
+            return (
+                "%s | where tostring(extractjson('$.Command', AdditionalFields)) in~ "
+                % self.tables
+                if self.tables[0] == "DeviceEvents"
+                and self.service == "powershell"
+                else f"{self.tables[0]} | where "
+            )
+
+        if "DeviceEvents" in self.tables and self.service == "powershell":
+            return "union %s | where tostring(extractjson('$.Command', AdditionalFields)) in~ " % ", ".join(self.tables)
+        return f'union {", ".join(self.tables)} | where '
 
     def generateORNode(self, node):
-        generated = super().generateORNode(node)
-        if generated:
-            return "%s" % generated
-        return generated
+        if generated := super().generateORNode(node):
+            return f"{generated}"
+        else:
+            return generated
 
     def cleanValue(self, val):
         if self.reEscape:
@@ -324,54 +322,55 @@ class WindowsDefenderATPBackend(SingleTextQueryBackend):
         return val
 
     def mapEventId(self, event_id):
-        if self.product == "windows":
-            if self.service == "sysmon" and event_id == 1 \
-                    or self.service == "security" and event_id == 4688:  # Process Execution
-                self.tables.append("DeviceProcessEvents")
-                self.current_table = "DeviceProcessEvents"
-                return None
-            elif self.service == "sysmon" and event_id == 3:  # Network Connection
-                self.tables.append("DeviceNetworkEvents")
-                self.current_table = "DeviceNetworkEvents"
-                return None
-            elif self.service == "sysmon" and event_id == 7:  # Image Load
-                self.tables.append("DeviceImageLoadEvents")
-                self.current_table = "DeviceImageLoadEvents"
-                return None
-            elif self.service == "sysmon" and event_id == 8:  # Create Remote Thread
-                self.tables.append("DeviceEvents")
-                self.current_table = "DeviceEvents"
-                return "ActionType == \"CreateRemoteThreadApiCall\""
-            elif self.service == "sysmon" and event_id == 11:  # File Creation
-                self.tables.append("DeviceFileEvents")
-                self.current_table = "DeviceFileEvents"
-                return "ActionType == \"FileCreated\""
-            elif self.service == "sysmon" and event_id == 23:  # File Deletion
-                self.tables.append("DeviceFileEvents")
-                self.current_table = "DeviceFileEvents"
-                return "ActionType == \"FileDeleted\""
-            elif self.service == "sysmon" and event_id == 12:  # Create/Delete Registry Value
-                self.tables.append("DeviceRegistryEvents")
-                self.current_table = "DeviceRegistryEvents"
-                return None
-            elif self.service == "sysmon" and event_id == 13 \
+        if self.product != "windows":
+            return
+        if self.service == "sysmon" and event_id == 1 \
+                        or self.service == "security" and event_id == 4688:  # Process Execution
+            self.tables.append("DeviceProcessEvents")
+            self.current_table = "DeviceProcessEvents"
+            return None
+        elif self.service == "sysmon" and event_id == 3:  # Network Connection
+            self.tables.append("DeviceNetworkEvents")
+            self.current_table = "DeviceNetworkEvents"
+            return None
+        elif self.service == "sysmon" and event_id == 7:  # Image Load
+            self.tables.append("DeviceImageLoadEvents")
+            self.current_table = "DeviceImageLoadEvents"
+            return None
+        elif self.service == "sysmon" and event_id == 8:  # Create Remote Thread
+            self.tables.append("DeviceEvents")
+            self.current_table = "DeviceEvents"
+            return "ActionType == \"CreateRemoteThreadApiCall\""
+        elif self.service == "sysmon" and event_id == 11:  # File Creation
+            self.tables.append("DeviceFileEvents")
+            self.current_table = "DeviceFileEvents"
+            return "ActionType == \"FileCreated\""
+        elif self.service == "sysmon" and event_id == 23:  # File Deletion
+            self.tables.append("DeviceFileEvents")
+            self.current_table = "DeviceFileEvents"
+            return "ActionType == \"FileDeleted\""
+        elif self.service == "sysmon" and event_id == 12:  # Create/Delete Registry Value
+            self.tables.append("DeviceRegistryEvents")
+            self.current_table = "DeviceRegistryEvents"
+            return None
+        elif self.service == "sysmon" and event_id == 13 \
                     or self.service == "security" and event_id == 4657:  # Set Registry Value
-                self.tables.append("DeviceRegistryEvents")
-                self.current_table = "DeviceRegistryEvents"
-                return "ActionType == \"RegistryValueSet\""
-            elif self.service == "security" and event_id == 4624:
-                self.tables.append("DeviceLogonEvents")
-                self.current_table = "DeviceLogonEvents"
-                return None
-            elif self.service == "system" and event_id == 7045: # New Service Install
-                self.tables.append("DeviceEvents")
-                self.current_table = "DeviceEvents"
-                return "ActionType == \"ServiceInstalled\""
+            self.tables.append("DeviceRegistryEvents")
+            self.current_table = "DeviceRegistryEvents"
+            return "ActionType == \"RegistryValueSet\""
+        elif self.service == "security" and event_id == 4624:
+            self.tables.append("DeviceLogonEvents")
+            self.current_table = "DeviceLogonEvents"
+            return None
+        elif self.service == "system" and event_id == 7045: # New Service Install
+            self.tables.append("DeviceEvents")
+            self.current_table = "DeviceEvents"
+            return "ActionType == \"ServiceInstalled\""
+        else:
+            if not self.tables:
+                raise NotSupportedError("No sysmon Event ID provided")
             else:
-                if not self.tables:
-                    raise NotSupportedError("No sysmon Event ID provided")
-                else:
-                    raise NotSupportedError("No mapping for Event ID %s" % event_id)
+                raise NotSupportedError(f"No mapping for Event ID {event_id}")
 
     @wrapper
     def generateMapItemNode(self, node):
@@ -382,14 +381,13 @@ class WindowsDefenderATPBackend(SingleTextQueryBackend):
         key, value = node
         if key == "EventID":
             # EventIDs are not reflected in condition but in table selection
-            if isinstance(value, str) or isinstance(value, int):
+            if isinstance(value, (str, int)):
                 value = int(value) if isinstance(value, str) else value
                 return self.mapEventId(value)
             elif isinstance(value, list):
                 return_payload = []
                 for event_id in value:
-                    res = self.mapEventId(event_id)
-                    if res:
+                    if res := self.mapEventId(event_id):
                         return_payload.append(res)
                 if len(return_payload) == 1:
                     return return_payload[0]
@@ -416,7 +414,7 @@ class WindowsDefenderATPBackend(SingleTextQueryBackend):
                     conds = mapping(key, self.cleanValue(value))
                     return self.andToken.join(["{} {}".format(*cond) for cond in conds])
             elif len(mapping) == 2:
-                result = list()
+                result = []
                 for mapitem, val in zip(mapping, node):     # iterate mapping and mapping source value synchronously over key and value
                     if type(mapitem) == str:
                         result.append(mapitem)
@@ -424,7 +422,10 @@ class WindowsDefenderATPBackend(SingleTextQueryBackend):
                         result.append(mapitem(self.cleanValue(val)))
                 return "{} {}".format(*result)
             else:
-                raise TypeError("Backend does not support map values of type " + str(type(value)))
+                raise TypeError(
+                    f"Backend does not support map values of type {str(type(value))}"
+                )
+
         elif isinstance(value, SigmaTypeModifier):
             try:
                 mapping = self.fieldMappings[self.current_table][key]
@@ -435,21 +436,23 @@ class WindowsDefenderATPBackend(SingleTextQueryBackend):
         return super().generateMapItemNode(node)
 
     def generateAggregation(self, agg):
-        if agg == None:
+        if agg is None:
             return ""
         if agg.aggfunc == sigma.parser.condition.SigmaAggregationParser.AGGFUNC_NEAR:
             raise NotImplementedError("The 'near' aggregation operator is not yet implemented for this backend")
-        if agg.groupfield == None:
+        if agg.groupfield is None:
             if agg.aggfunc_notrans == 'count':
-                if agg.aggfield == None :
-                    return " | summarize val=count() | where val %s %s" % (agg.cond_op, agg.condition)
+                if agg.aggfield is None:
+                    return f" | summarize val=count() | where val {agg.cond_op} {agg.condition}"
                 else:
                     agg.aggfunc_notrans = 'dcount'
-            return " | summarize val=%s(%s) as val | where val %s %s" % (agg.aggfunc_notrans, agg.aggfield or "", agg.cond_op, agg.condition)
+            return f' | summarize val={agg.aggfunc_notrans}({agg.aggfield or ""}) as val | where val {agg.cond_op} {agg.condition}'
+
         else:
             if agg.aggfunc_notrans == 'count':
-                if agg.aggfield == None :
-                    return " | summarize val=count() by %s | where val %s %s" % (agg.groupfield, agg.cond_op, agg.condition)
+                if agg.aggfield is None:
+                    return f" | summarize val=count() by {agg.groupfield} | where val {agg.cond_op} {agg.condition}"
+
                 else:
                     agg.aggfunc_notrans = 'dcount'
-            return " | summarize val=%s(%s) by %s | where val %s %s" % (agg.aggfunc_notrans, agg.aggfield or "", agg.groupfield or "", agg.cond_op, agg.condition)
+            return f' | summarize val={agg.aggfunc_notrans}({agg.aggfield or ""}) by {agg.groupfield or ""} | where val {agg.cond_op} {agg.condition}'

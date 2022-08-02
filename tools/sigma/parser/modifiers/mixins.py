@@ -36,7 +36,7 @@ class ListOrStringModifierMixin(object):
     def apply_list(self):
         """Method is called if modifier value contains a list"""
         l = [ self.apply_str(val) for val in self.value ]
-        rl = list()
+        rl = []
         for i in l:
             if type(i) in { list, tuple, set }:
                 rl.extend(i)

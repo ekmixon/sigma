@@ -36,7 +36,7 @@ async def run_sigmac():
             )
     print("* Launching sigmac")
     proc = await sigmac
-    print("* sigmac launched with PID {}".format(proc.pid))
+    print(f"* sigmac launched with PID {proc.pid}")
 
     cur_rule = None
     while True:
@@ -54,7 +54,7 @@ async def run_sigmac():
     await proc.wait()
 
     exitcode = proc.returncode
-    print("* sigmac returned with exit code {}".format(exitcode))
+    print(f"* sigmac returned with exit code {exitcode}")
     return exitcode
 
 task_sigmac = asyncio.ensure_future(run_sigmac())

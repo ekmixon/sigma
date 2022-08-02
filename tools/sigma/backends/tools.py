@@ -47,7 +47,7 @@ class FieldnameListBackend(BaseBackend):
         return self.generateNode(node.items)
 
     def generateListNode(self, node):
-        if not set([type(value) for value in node]).issubset({str, int}):
+        if not {type(value) for value in node}.issubset({str, int}):
             raise TypeError("List values must be strings or numbers")
         return [self.generateNode(value) for value in node]
 
@@ -65,7 +65,7 @@ class FieldnameListBackend(BaseBackend):
         return [node.item]
 
     def generateAggregation(self, agg):
-        fields = list()
+        fields = []
         if agg.groupfield is not None:
             fields.append(agg.groupfield)
         if agg.aggfield is not None:

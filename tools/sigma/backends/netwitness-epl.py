@@ -70,11 +70,11 @@ class NetWitnessEplBackend(SingleTextQueryBackend):
                 value = re.sub('([".^$]|\\\\(?![*?]))', '\\\\\g<1>', value)
                 value = re.sub('\\*', '.*', value)
                 value = re.sub('\\?', '.', value)
-                return "(%s REGEXP %s)" %(key, self.generateValueNode(value))
+                return f"({key} REGEXP {self.generateValueNode(value)})"
             elif type(value) == str and "*" in value:
                 value = re.sub("(\*\\\\)|(\*)", "", value)
-                value = self.generateValueNode("%"+value+"%")  # add "%" to construct the like expression  ex: process like %psexesvc%
-                return "(%s LIKE %s)" % (key,value)
+                value = self.generateValueNode(f"%{value}%")
+                return f"({key} LIKE {value})"
             elif type(value) in (str, int):
                 return self.mapExpression % (key, self.generateValueNode(value))
             else:
@@ -83,25 +83,27 @@ class NetWitnessEplBackend(SingleTextQueryBackend):
             return self.generateMapItemListNode(key, value)
         elif value is None:
             return self.nullExpression % (key, )
-			
+
         elif type(value) == SigmaRegularExpressionModifier:  ## if value is regex
             regex = str(value)
 			## in RSA netwitness EPL regex each backslash must be escaped by backslash
 			## ex :  c:\temp\  to regex ->  c:\\temp\\  to RSA EPL regex --> c:\\\\temp\\\\
-            regex = regex.replace("\\","\\\\") 
+            regex = regex.replace("\\","\\\\")
             # Regular Expressions have to match the full value in RSA Netwitness EPL
             if not (regex.startswith('^') or regex.startswith('.*')):
-                regex = '.*' + regex
+                regex = f'.*{regex}'
             if not (regex.endswith('$') or regex.endswith('.*')):
-                regex = regex + '.*'
-            return "(%s REGEXP %s)" %(key, self.generateValueNode(regex))
+                regex += '.*'
+            return f"({key} REGEXP {self.generateValueNode(regex)})"
         else:
-            raise TypeError("Backend does not support map values of type " + str(type(value)))
+            raise TypeError(
+                f"Backend does not support map values of type {str(type(value))}"
+            )
 
     def generateMapItemListNode(self, key, value):
-        equallist = list()
-        containlist = list()
-        regexlist = list()
+        equallist = []
+        containlist = []
+        regexlist = []
         for item in value:
             if type(item) == str and "*" in item[1:-1]:
                 item = re.sub('([".^$]|\\\\(?![*?]))', '\\\\\g<1>', item)
@@ -112,33 +114,33 @@ class NetWitnessEplBackend(SingleTextQueryBackend):
                 item_temp=item
                 item = re.sub("(\*\\\\)|(\*)", "", item)
                 if item_temp.endswith("*") and item_temp.startswith("*"):   # pattern begins with "*" and ends with "*"
-                    containlist.append(self.generateValueNode('%'+item+'%'))  # add "%" to construct the like expression  ex: process like %psexesvc%
+                    containlist.append(self.generateValueNode(f'%{item}%'))
                 elif item_temp.startswith("*"):   # pattern don't end with "*"
-                    containlist.append(self.generateValueNode('%'+item))
+                    containlist.append(self.generateValueNode(f'%{item}'))
                 else: # item_temp.endswith("*")  pattern don't begin with "*"
-                    containlist.append(self.generateValueNode(item+'%'))
+                    containlist.append(self.generateValueNode(f'{item}%'))
             else:
                 equallist.append(self.generateValueNode(item))
-        fmtitems = list()
+        fmtitems = []
         if equallist:
             if len(equallist) == 1:
-                fmtitems.append("%s = %s" % (key, ", ".join(equallist)))
+                fmtitems.append(f'{key} = {", ".join(equallist)}')
             else:
-                # add "(" and ")" to the first and the last item from the list to have  meta_key IN ('value1','value2')	
-                equallist[0]=("("+equallist[0])
-                equallist[-1]=(equallist[-1]+")")
-                fmtitems.append("%s IN %s" % (key, ", ".join(equallist)))
-            
+                # add "(" and ")" to the first and the last item from the list to have  meta_key IN ('value1','value2')
+                equallist[0] = f"({equallist[0]}"
+                equallist[-1] = f"{equallist[-1]})"
+                fmtitems.append(f'{key} IN {", ".join(equallist)}')
+
         if containlist:
-            fmtitems.append("%s LIKE %s" % (key, (" OR "+key+" LIKE ").join(containlist)))
+            fmtitems.append(f'{key} LIKE {f" OR {key} LIKE ".join(containlist)}')
         if regexlist:
-            fmtitems.append("%s REGEXP %s" % (key, "|".join(regexlist)))
+            fmtitems.append(f'{key} REGEXP {"|".join(regexlist)}')
         fmtquery = "("+" OR ".join(filter(None, fmtitems))
         # Delete the " ' " from the begin or the end of each regex pattern ex : '.*('patern1'|'patern2').*' --> '.*(patern1|patern2).*'
         fmtquery = re.sub('\'\.\*\(\'','\'.*(',fmtquery)
         fmtquery = re.sub('\'\)\.\*\'',').*\'',fmtquery)
         fmtquery = re.sub('\'\|\'','|',fmtquery)
-        fmtquery = fmtquery+')'
+        fmtquery = f'{fmtquery})'
         return fmtquery
 
     def generateValueNode(self, node):
@@ -155,9 +157,7 @@ class NetWitnessEplBackend(SingleTextQueryBackend):
                 query=query.replace('module_XXXXX', "module "+sigmaparser.parsedyaml["title"].replace(" ","")) # add rule name
             except:
                 print("Error when replacing RuleName by Title from yaml")
-                pass
             return query
 
     def generateQuery(self, parsed, sigmaparser):
-        result = self.generateNode(parsed.parsedSearch)
-        return result
+        return self.generateNode(parsed.parsedSearch)

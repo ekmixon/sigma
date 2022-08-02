@@ -101,9 +101,7 @@ class FireEyeHelixBackend(SingleTextQueryBackend):
                     _value, divinedExpression = self.parseStringValue(
                         key, _value, divinedExpression, fieldForcedExpression, True
                     )
-                    newList.append(_value)
-                else:
-                    newList.append(_value)
+                newList.append(_value)
             return divinedExpression % (key, self.generateNode(newList))
         elif isinstance(value, SigmaTypeModifier):
             if isinstance(value, (SigmaStartswithModifier, SigmaEndswithModifier)):
@@ -111,31 +109,25 @@ class FireEyeHelixBackend(SingleTextQueryBackend):
                 # Strip prefix/suffix matching wildcards on rawmsg field searches
                 if key == self.nonTaxonomyField and isinstance(value, str):
                     value.strip("*")
-            elif isinstance(value, SigmaContainsModifier):
-                divinedExpression = self.mapContainsExpression
-            elif isinstance(value, SigmaRegularExpressionModifier):
+            elif isinstance(
+                value, (SigmaContainsModifier, SigmaRegularExpressionModifier)
+            ):
                 divinedExpression = self.mapContainsExpression
             return divinedExpression % (key, self.generateTypedValueNode(value))
         elif value is None:
             return self.nullExpression % (key,)
         else:
             raise TypeError(
-                "Backend does not support map values of type " + str(type(value))
+                f"Backend does not support map values of type {str(type(value))}"
             )
 
     def generateNULLValueNode(self, node):
         # Don't generate null value nodes for fields we don't map
-        if node.item == "rawmsg":
-            return None
-        else:
-            return self.notNullExpression % (node.item)
+        return None if node.item == "rawmsg" else self.notNullExpression % (node.item)
 
     def generateNotNULLValueNode(self, node):
         # Don't generate not null value nodes for fields we don't map
-        if node.item == "rawmsg":
-            return None
-        else:
-            return self.nullExpression % (node.item)
+        return None if node.item == "rawmsg" else self.nullExpression % (node.item)
 
     def parseStringValue(
         self, key, value, divinedExpression, fieldForcedExpression, isList
@@ -151,16 +143,13 @@ class FireEyeHelixBackend(SingleTextQueryBackend):
             value = value[1:-1]
             if not fieldForcedExpression:
                 divinedExpression = self.mapContainsExpression
-        # Prefix/suffix matches are "contains" operators
         elif value.startswith("*") or value.endswith("*"):
             # Strip wildcards from rawmsg matching because we don't know where in the log we're matching from
             if key == self.nonTaxonomyField:
                 value = value.strip("*")
             if not fieldForcedExpression:
                 divinedExpression = self.mapContainsExpression
-        # If we have no indicators of this being a "contains" match for a string, use an exact match
-        else:
-            if not fieldForcedExpression and not isList:
-                divinedExpression = self.mapExpression
+        elif not fieldForcedExpression and not isList:
+            divinedExpression = self.mapExpression
 
         return value, divinedExpression

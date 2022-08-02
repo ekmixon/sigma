@@ -22,8 +22,8 @@ from .modifiers import apply_modifiers
 class SigmaParser:
     """Parse a Sigma rule (definitions, conditions and aggregations)"""
     def __init__(self, sigma, config):
-        self.definitions = dict()
-        self.values = dict()
+        self.definitions = {}
+        self.values = {}
         self.config = config
         self.parsedyaml = sigma
         self.parse_sigma()
@@ -39,16 +39,18 @@ class SigmaParser:
 
         try:    # tokenization
             conditions = self.parsedyaml["detection"]["condition"]
-            self.condtoken = list()     # list of tokenized conditions
+            self.condtoken = []
             if type(conditions) == str:
                 self.condtoken.append(SigmaConditionTokenizer(conditions))
             elif type(conditions) == list:
-                for condition in conditions:
-                    self.condtoken.append(SigmaConditionTokenizer(condition))
+                self.condtoken.extend(
+                    SigmaConditionTokenizer(condition) for condition in conditions
+                )
+
         except KeyError:
             raise SigmaParseError("No condition found")
 
-        self.condparsed = list()        # list of parsed conditions
+        self.condparsed = []
         for tokens in self.condtoken:
             condparsed = SigmaConditionParser(self, tokens)
             self.condparsed.append(condparsed)
@@ -65,11 +67,7 @@ class SigmaParser:
             raise SigmaParseError("Expected map or list, got type %s: '%s'" % (type(definition), str(definition)))
 
         if type(definition) == list:    # list of values or maps
-            if condOverride:    # condition given through rule detection condition, e.g. 1 of x
-                cond = condOverride()
-            else:               # no condition given, use default from spec
-                cond = ConditionOR()
-
+            cond = condOverride() if condOverride else ConditionOR()
             subcond = None
             for value in definition:
                 if type(value) in (str, int):
@@ -149,28 +147,27 @@ class SigmaParser:
         logsource = self.get_logsource()
         if logsource is None:
             return None
+        cond = ConditionAND()
+        if self.config.get_logsourcemerging() == 'or':
+            cond.add(self.build_conditions(ConditionOR,  logsource.conditions))
         else:
-            cond = ConditionAND()
-            if self.config.get_logsourcemerging() == 'or':
-                cond.add(self.build_conditions(ConditionOR,  logsource.conditions))
-            else:
-                cond.add(self.build_conditions(ConditionAND, logsource.conditions))
+            cond.add(self.build_conditions(ConditionAND, logsource.conditions))
 
-            # Add index condition if supported by backend and defined in log source
-            index_field = self.config.get_indexfield()
-            indices = logsource.index
-            if len(indices) > 0 and index_field is not None:        # at least one index given and backend knows about indices in conditions
-                if len(indices) > 1:      # More than one index, search in all by ORing them together
-                    index_cond = ConditionOR()
-                    for index in indices:
-                        index_cond.add((index_field, index))
-                    cond.add(index_cond)
-                else:           # only one index, add directly to AND from above
-                    cond.add((index_field, indices[0]))
+        # Add index condition if supported by backend and defined in log source
+        index_field = self.config.get_indexfield()
+        indices = logsource.index
+        if len(indices) > 0 and index_field is not None:        # at least one index given and backend knows about indices in conditions
+            if len(indices) > 1:      # More than one index, search in all by ORing them together
+                index_cond = ConditionOR()
+                for index in indices:
+                    index_cond.add((index_field, index))
+                cond.add(index_cond)
+            else:           # only one index, add directly to AND from above
+                cond.add((index_field, indices[0]))
 
-            # Add free-text search condition, expressed in the configuration as 'search' field.
-            if len(logsource.search) > 0:
-                for item in logsource.search:
-                    cond.add(SigmaSearchValueAsIs(item))
+        # Add free-text search condition, expressed in the configuration as 'search' field.
+        if len(logsource.search) > 0:
+            for item in logsource.search:
+                cond.add(SigmaSearchValueAsIs(item))
 
-            return cond
+        return cond

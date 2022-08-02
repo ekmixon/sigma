@@ -129,7 +129,7 @@ def parse_ary(s: str) -> Ary:
     for i in range(1, len(lst), 2):
         tupe = (lst[i], lst[i + 1])
         bool2.append(tupe)
-    
+
     return Ary(bool1, bool2)
 
 def translate_atom(atom: Atom) -> dict:
@@ -154,7 +154,7 @@ Combining ary.bool1 and ary.bool2 into array of Boolean grouped by ANDs and spli
 def convert_bool_array(bool1: Boolean, boolArr: List[Tuple[str, Boolean]]) -> List[List[Boolean]]:
     result = [[bool1]]
     resultIndex = 0
-    
+
     for rel, boolean in boolArr:
         if rel == "AND":
             if resultIndex == len(result):
@@ -177,8 +177,8 @@ def adjust_matches(matches: List[dict], clause) -> List[dict]:
     groupMatches = []
 
     # Determine if current statement is an atomic match or bool group statement
-    for index in range(len(matches)):
-        match = matches[index]
+    for match_ in matches:
+        match = match_
         if "match" in match.keys():
             atomicMatches.append(match)
         else:
@@ -194,25 +194,20 @@ def adjust_matches(matches: List[dict], clause) -> List[dict]:
                     clause: atomicMatches
                 }
             }]
-    
+
     return combinedAtomicMatches + groupMatches
 
 def contains_group(booleanArr: List[Boolean]) -> bool:
-    for boolean in booleanArr:
-        if type(boolean.expression) is Group:
-            return True
-    
-    return False
+    return any(type(boolean.expression) is Group for boolean in booleanArr)
 
 def translate_ary(ary: Ary) -> dict:
     parsedTranslation = convert_bool_array(ary.bool1, ary.bool2)
 
     clauses = []
-    
+
     translateIndex = 0
     while translateIndex < len(parsedTranslation):
         parsedExpression = parsedTranslation[translateIndex]
-        currMatches = []
         clause = "must" # default clause is "must"; clause is "should" if multiple consecutive "or" statements
 
         # Statement was joined by "or"
@@ -231,13 +226,10 @@ def translate_ary(ary: Ary) -> dict:
                 # Rebuild parsed expression to join statements together and fast forward the translate index
                 for i in range(counter):
                     parsedExpression += parsedTranslation[translateIndex+i]
-                
+
                 translateIndex = tempIndex
-        
-        # Iterate through each statement and join match statements into array
-        for boolean in parsedExpression:
-            currMatches.append(translate_boolean(boolean))
-        
+
+        currMatches = [translate_boolean(boolean) for boolean in parsedExpression]
         # If bool array contains a Group which is wrapped in a bool, match statements must also be wrapped in a bool.
         if contains_group(parsedExpression):
             currMatches = adjust_matches(currMatches, clause)
@@ -252,13 +244,7 @@ def translate_ary(ary: Ary) -> dict:
         translateIndex += 1
 
     # If only one type of clause, don't use nested bool object
-    if len(clauses) > 1:
-        return {
-                        "bool": {
-                            "should": clauses
-                        }
-                    }
-    return clauses[0]
+    return {"bool": {"should": clauses}} if len(clauses) > 1 else clauses[0]
 
 class OpenSearchBackend(object):
     """OpenSearch detection rule backend."""
@@ -297,12 +283,11 @@ class OpenSearchBackend(object):
     def _load_mitre_file(self, mitre_type):
         try:
             backend_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "config", "mitre"))
-            path = os.path.join(backend_dir,"{}.json".format(mitre_type))
+            path = os.path.join(backend_dir, f"{mitre_type}.json")
             with open(path, 'r') as config_file:
-                config = json.load(config_file)
-                return config
+                return json.load(config_file)
         except (IOError, OSError) as e:
-            print("Failed to open {} configuration file '%s': %s".format(path, str(e)), file=sys.stderr)
+            print(f"Failed to open {path} configuration file '%s': %s", file=sys.stderr)
             return []
         except json.JSONDecodeError as e:
             print("Failed to parse {} configuration file '%s' as valid YAML: %s" % (path, str(e)), file=sys.stderr)
@@ -315,21 +300,19 @@ class OpenSearchBackend(object):
     def generate(self, sigmaparser):
         # reset per-detection variables
         self.rule_threshold = {}
-        translation = super().generate(sigmaparser)
-        if translation:
+        if translation := super().generate(sigmaparser):
             index = sigmaparser.get_logsource().index
             if len(index) == 0:
                 index = ["apm-*-transaction", "auditbeat-*", "endgame-*", "filebeat-*", "packetbeat-*", "winlogbeat-*"]
             configs = sigmaparser.parsedyaml
             configs.update({"translation": translation})
-            rule = self.create_rule(configs, index)
-            return rule
+            return self.create_rule(configs, index)
 
     '''
     Generates threat detection for OpenSearch monitor, which compiles tactics and techniques found in Sigma tags.
     '''
     def create_threat_description(self, tactics_list, techniques_list):
-        threat_list = list()
+        threat_list = []
         for tactic in tactics_list:
             temp_tactics = {
                 "tactic": {
@@ -339,15 +322,17 @@ class OpenSearchBackend(object):
                 },
                 "framework": "MITRE ATT&CK®"
             }
-            temp_techniques = list()
-            for tech in techniques_list:
-                if tactic.get("tactic", "") in tech.get("tactic", []):
-                    temp_techniques.append({
-                                "id": tech.get("technique_id", ""),
-                                "name": tech.get("technique", ""),
-                                "reference": tech.get("url", "")
-                            })
-            temp_tactics.update({"technique": temp_techniques})
+            temp_techniques = [
+                {
+                    "id": tech.get("technique_id", ""),
+                    "name": tech.get("technique", ""),
+                    "reference": tech.get("url", ""),
+                }
+                for tech in techniques_list
+                if tactic.get("tactic", "") in tech.get("tactic", [])
+            ]
+
+            temp_tactics["technique"] = temp_techniques
             threat_list.append(temp_tactics)
         return threat_list
 
@@ -448,62 +433,54 @@ class OpenSearchBackend(object):
             return None
         yml_filename = configs.get("yml_filename")
         yml_path = configs.get("yml_path")
-        if yml_filename == None or yml_path == None:
+        if yml_filename is None or yml_path is None:
             return None
-            
-        if self.convert_to_url:
-            yml_path = yml_path.replace('\\','/')                              #windows path to url 
-            self.path_to_replace = self.path_to_replace.replace('\\','/')      #windows path to url            
-            if self.path_to_replace not in yml_path: #Error to change
-                return None
 
-            new_ref = yml_path.replace(self.path_to_replace,self.dest_base_url) + '/' + yml_filename
-        else:
-            new_ref = yml_filename
-        return new_ref
+        if not self.convert_to_url:
+            return yml_filename
+        yml_path = yml_path.replace('\\','/')                              #windows path to url 
+        self.path_to_replace = self.path_to_replace.replace('\\','/')      #windows path to url            
+        return (
+            None
+            if self.path_to_replace not in yml_path
+            else f'{yml_path.replace(self.path_to_replace, self.dest_base_url)}/{yml_filename}'
+        )
 
     '''
     Builds the list of searchable tags. Matches against list of known tags and adds any custom tags.
     '''
     def build_tags_list(self, tags):
-        tactics_list = list()
-        new_tags = list()
-        technics_list = list()
+        tactics_list = []
+        new_tags = []
+        technics_list = []
 
         for tag in tags:
             tag = tag.replace("attack.", "")
             if re.match("[t][0-9]{4}", tag, re.IGNORECASE):
-                tech = self.find_technique(tag.title())
-                if tech:
+                if tech := self.find_technique(tag.title()):
                     new_tags.append(tag.title())
                     technics_list.append(tech)
-            else:
-                if "_" in tag:
-                    tag_list = tag.split("_")
-                    tag_list = [item.title() for item in tag_list]
-                    tact = self.find_tactics(key_name=" ".join(tag_list))
-                    if tact:
-                        new_tags.append(" ".join(tag_list))
-                        tactics_list.append(tact)
-                elif re.match("[ta][0-9]{4}", tag, re.IGNORECASE):
-                    tact = self.find_tactics(key_id=tag.upper())
-                    if tact:
-                        new_tags.append(tag.upper())
-                        tactics_list.append(tact)
-                else:
-                    tact = self.find_tactics(key_name=tag.title())
-                    if tact:
-                        new_tags.append(tag.title())
-                        tactics_list.append(tact)
+            elif "_" in tag:
+                tag_list = tag.split("_")
+                tag_list = [item.title() for item in tag_list]
+                if tact := self.find_tactics(key_name=" ".join(tag_list)):
+                    new_tags.append(" ".join(tag_list))
+                    tactics_list.append(tact)
+            elif re.match("[ta][0-9]{4}", tag, re.IGNORECASE):
+                if tact := self.find_tactics(key_id=tag.upper()):
+                    new_tags.append(tag.upper())
+                    tactics_list.append(tact)
+            elif tact := self.find_tactics(key_name=tag.title()):
+                new_tags.append(tag.title())
+                tactics_list.append(tact)
 
         if self.custom_tag:
             if ',' in self.custom_tag:
                 tag_split = self.custom_tag.split(",")
-                for l_tag in tag_split:
-                    new_tags.append(l_tag)   
+                new_tags.extend(iter(tag_split))
             else:    
                 new_tags.append(self.custom_tag)
-        
+
         return tactics_list, technics_list, new_tags
 
     '''
@@ -514,9 +491,7 @@ class OpenSearchBackend(object):
         if rule_uuid == "" or rule_uuid in self.uuid_black_list:
             rule_uuid = str(uuid4())
         self.uuid_black_list.append(rule_uuid)
-        rule_id = re.sub(re.compile('[()*+!,\[\].\s"]'), "_", rule_uuid)
-
-        return rule_id
+        return re.sub(re.compile('[()*+!,\[\].\s"]'), "_", rule_uuid)
 
     '''
     Gets list of references.
@@ -530,15 +505,12 @@ class OpenSearchBackend(object):
     Adds Sigma yml file to references.
     '''
     def build_ref_yaml(self, references, configs):
-        add_ref_yml = self.build_ymlfile_ref(configs)
-        if add_ref_yml:
+        if add_ref_yml := self.build_ymlfile_ref(configs):
             if references is None: # No ref
                 references=[]
-            if add_ref_yml in references:
-                pass # else put a duplicate ref for  multi rule file
-            else:
+            if add_ref_yml not in references:
                 references.append(add_ref_yml)
-        
+
         return references
 
     '''
@@ -546,20 +518,20 @@ class OpenSearchBackend(object):
     '''
     def create_rule(self, configs, index):
         rule_name = configs.get("title", "")
-        
+
         rule_description = configs.get("description", "")
-        
+
         inputs = self.build_inputs(configs.get("translation", ""))
-        
+
         triggers = self.create_trigger(configs.get("level", "medium"))
-        
+
         rule_id = self.get_rule_id(configs.get("id", ""))
 
-        tactics_list, technics_list, new_tags = self.build_tags_list(configs.get("tags", []))   
+        tactics_list, technics_list, new_tags = self.build_tags_list(configs.get("tags", []))
         threat = self.create_threat_description(tactics_list, technics_list)
-        
+
         references = self.get_references(configs)
-        
+
         rule = {
             "type": self.RULE_TYPE,
             "name": rule_name,
@@ -581,7 +553,7 @@ class OpenSearchBackend(object):
         }
 
         if references:
-            rule.update({"references": references})
+            rule["references"] = references
 
         return json.dumps(rule)
 
@@ -597,8 +569,13 @@ class OpenSearchQsBackend(OpenSearchBackend, ElasticsearchQuerystringBackend):
     def generateAggregation(self, agg):
         if agg.aggfunc == SigmaAggregationParser.AGGFUNC_COUNT:
             if agg.aggfield:
-                raise NotImplementedError("Threshold rules cannot COUNT(DISTINCT %s)" % agg.aggfield)
+                raise NotImplementedError(
+                    f"Threshold rules cannot COUNT(DISTINCT {agg.aggfield})"
+                )
+
             self.isThreshold = True
             self.rule_threshold = self.build_threshold(agg.groupfield, agg.cond_op, agg.condition)
             return ""
-        raise NotImplementedError("Aggregation %s is not implemented for this backend" % agg.aggfunc_notrans)
+        raise NotImplementedError(
+            f"Aggregation {agg.aggfunc_notrans} is not implemented for this backend"
+        )

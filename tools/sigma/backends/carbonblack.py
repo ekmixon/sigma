@@ -32,15 +32,11 @@ class CarbonBlackWildcardHandlingMixin:
         try:
             self.blacklist = self.keyword_blacklist.split(",")
         except AttributeError:
-            self.blacklist = list()
+            self.blacklist = []
 
     def containsWildcard(self, value):
         """Determine if value contains wildcard."""
-        if type(value) == str:
-            res = self.reContainsWildcard(value)
-            return res
-        else:
-            return False
+        return self.reContainsWildcard(value) if type(value) == str else False
 
 
 class CarbonBlackQueryBackend(CarbonBlackWildcardHandlingMixin, SingleTextQueryBackend):
@@ -114,13 +110,13 @@ class CarbonBlackQueryBackend(CarbonBlackWildcardHandlingMixin, SingleTextQueryB
             for strMatch in matches:
                 if re.match('\S+ \S', strMatch):
                     strUnescapeMatch = self.unescapeCharacter(strMatch)
-                    val = val.replace(strMatch, '"{}"'.format(strUnescapeMatch))
+                    val = val.replace(strMatch, f'"{strUnescapeMatch}"')
         return val.strip()
     
     def fixWildcards(self, val):
         # prob a better way to do this with SigmaStartswithModifier/SigmaEndswithModifier? idk, fail fast!
         if val.endswith("\\\\"):
-            val = val[:-1] + "*"
+            val = f"{val[:-1]}*"
         if val.startswith("\\\\") and not val.startswith("\\\\\\\\"):
             val = val[2:]
         return val
@@ -147,7 +143,7 @@ class CarbonBlackQueryBackend(CarbonBlackWildcardHandlingMixin, SingleTextQueryB
             if value[-2:] == '.*':
                 value = value[:-2]
             min_ip = value + '.0' * (4 - sub)
-            new_value = min_ip + '/' + str(8 * (4 - sub))
+            new_value = f'{min_ip}/{str(8 * (4 - sub))}'
         elif isinstance(new_value, list):
             for index, vl in enumerate(new_value):
                 new_value[index] = self.cleanIPRange(vl)
@@ -159,10 +155,7 @@ class CarbonBlackQueryBackend(CarbonBlackWildcardHandlingMixin, SingleTextQueryB
         if result == "" or result.isspace():
             return '""'
         else:
-            if self.matchKeyword:  # don't quote search value on keyword field
-                return result
-            else:
-                return "%s" % result
+            return result if self.matchKeyword else f"{result}"
 
     def generateMapItemNode(self, node):
         fieldname, value = node
@@ -172,47 +165,45 @@ class CarbonBlackQueryBackend(CarbonBlackWildcardHandlingMixin, SingleTextQueryB
             value = self.generateEventValue(value)
         if fieldname.lower() in self.excluded_fields:
             return
-        else:
-            transformed_fieldname = self.fieldNameMapping(fieldname, value)
-            if transformed_fieldname == "ipaddr":
-                value = self.cleanIPRange(value)
-            if (
+        transformed_fieldname = self.fieldNameMapping(fieldname, value)
+        if transformed_fieldname == "ipaddr":
+            value = self.cleanIPRange(value)
+        if (
                 self.mapListsSpecialHandling == False
                 and type(value) in (str, int, list)
                 or self.mapListsSpecialHandling == True
                 and type(value) in (str, int)
             ):
                 # return self.mapExpression % (transformed_fieldname, self.generateNode(value))
-                if isinstance(value, list):
-                    return self.generateNode(
-                        [
-                            self.mapExpression
-                            % (transformed_fieldname, self.cleanValue(item))
-                            for item in value
-                        ]
-                    )
-                elif isinstance(value, str) or isinstance(value, int):
-                    return self.mapExpression % (
-                        transformed_fieldname,
-                        self.generateNode(self.cleanValue(value)),
-                    )
-            elif type(value) == list:
-                return self.generateMapItemListNode(transformed_fieldname, value)
-            elif isinstance(value, SigmaTypeModifier) and not isinstance(
-                value, SigmaRegularExpressionModifier
-            ):
-                return self.generateMapItemTypedNode(transformed_fieldname, value)
-            elif value is None:
-                return self.nullExpression % (transformed_fieldname,)
-            else:
-                raise TypeError(
-                    "Backend does not support map values of type " + str(type(value))
+            if isinstance(value, list):
+                return self.generateNode(
+                    [
+                        self.mapExpression
+                        % (transformed_fieldname, self.cleanValue(item))
+                        for item in value
+                    ]
                 )
+            elif isinstance(value, (str, int)):
+                return self.mapExpression % (
+                    transformed_fieldname,
+                    self.generateNode(self.cleanValue(value)),
+                )
+        elif type(value) == list:
+            return self.generateMapItemListNode(transformed_fieldname, value)
+        elif isinstance(value, SigmaTypeModifier) and not isinstance(
+            value, SigmaRegularExpressionModifier
+        ):
+            return self.generateMapItemTypedNode(transformed_fieldname, value)
+        elif value is None:
+            return self.nullExpression % (transformed_fieldname,)
+        else:
+            raise TypeError(
+                f"Backend does not support map values of type {str(type(value))}"
+            )
 
     def generateNOTNode(self, node):
-        expression = super().generateNode(node.item)
-        if expression:
-            return "(%s%s)" % (self.notToken, expression)
+        if expression := super().generateNode(node.item):
+            return f"({self.notToken}{expression})"
 
     # Function to upload watchlists through CB API
 
@@ -220,26 +211,21 @@ class CarbonBlackQueryBackend(CarbonBlackWildcardHandlingMixin, SingleTextQueryB
         url = os.getenv("cbapi_watchlist")
         body = {
             "name": title,
-            "search_query": "q=" + str(result),
+            "search_query": f"q={str(result)}",
             "description": desc,
             "index_type": "events",
         }
+
         header = {"X-Auth-Token": os.getenv("APIToken")}
         print(title)
         x = requests.post(url, data=json.dumps(body), headers=header, verify=False)
         print(x.text)
 
     def generateEventKey(self, value):
-        if value in event:
-            return event[value][0]
-        else:
-            return 'eventid'
+        return event[value][0] if value in event else 'eventid'
 
     def generateEventValue(self, value):
-        if value in event:
-            return event[value][1]
-        else:
-            return ''
+        return event[value][1] if value in event else ''
 
     def generate(self, sigmaparser):
         """Method is called for each sigma rule and receives the parsed rule (SigmaParser)"""

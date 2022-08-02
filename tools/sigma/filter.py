@@ -38,13 +38,13 @@ class SigmaRuleFilter:
         self.notstatus     = None
         self.tlp           = None
         self.target        = None
-        self.logsources    = list()
-        self.notlogsources = list()
-        self.tags          = list()
-        self.nottags       = list()
+        self.logsources = []
+        self.notlogsources = []
+        self.tags = []
+        self.nottags = []
         self.inlastday     = None
-        self.condition     = list()
-        self.notcondition  = list()
+        self.condition = []
+        self.notcondition = []
 
         for cond in [c.replace(" ", "") for c in expr.split(",")]:
             if cond.startswith("level<="):
@@ -109,13 +109,11 @@ class SigmaRuleFilter:
                 return False    # User wants level restriction, but it's not possible here
 
             # Minimum level
-            if self.minlevel is not None:
-                if level < self.minlevel:
-                    return False
+        if self.minlevel is not None and level < self.minlevel:
+            return False
             # Maximum level
-            if self.maxlevel is not None:
-                if level > self.maxlevel:
-                    return False
+        if self.maxlevel is not None and level > self.maxlevel:
+            return False
 
         # Status
         if self.status is not None:
@@ -226,7 +224,7 @@ class SigmaRuleFilter:
             except KeyError:    # missing condition
                 return False    # User wants condition restriction, but it's not possible here
             for val in self.condition:
-                if not val in s_condition:
+                if val not in s_condition:
                     return False
 
         if self.notcondition:

@@ -27,7 +27,7 @@ class SingleFileOutput(Output):
             else:
                 self.f.write("---\n")
             self.path = path
-            self.f.write("# Sigma rule: {}\n".format(path))
+            self.f.write(f"# Sigma rule: {path}\n")
 
     def finish(self):
         self.f.close()
@@ -71,10 +71,7 @@ def get_output(output):
         return StdoutOutput()
 
     path = Path(output)
-    if path.is_dir():
-        return DirectoryOutput(path)
-    else:
-        return SingleFileOutput(output)
+    return DirectoryOutput(path) if path.is_dir() else SingleFileOutput(output)
 
 class AmbiguousRuleException(TypeError):
     def __init__(self, ids):
@@ -110,35 +107,34 @@ def convert_to_generic(yamldoc):
 
         if 1 in eventids and service == "sysmon" or \
                 4688 in eventids and service == "security":
-            if len(eventids) == 1:      # only convert if one EventID collected, else it gets complicated
-                # remove all EventID definitions
-                empty_name = list()
-                for name, detection in yamldoc["detection"].items():
-                    if name == "condition" or type(detection) is not dict:
-                        continue
-                    try:
-                        del detection["EventID"]
-                    except KeyError:
-                        pass
-
-                    if detection == {}:     # detection was reduced to nothing - remove it later
-                        empty_name.append(name)
-
-                for name in empty_name:     # delete empty detections
-                    del yamldoc["detection"][name]
-
-                if yamldoc["detection"] == {}:  # delete detection section if empty
-                    del yamldoc["detection"]
-
-                # rewrite log source
-                yamldoc["logsource"] = {
-                        "category": "process_creation",
-                        "product":  "windows"
-                        }
-
-                changed = True
-            else:                       # raise an exception to print a warning message to make user aware about the issue
+            if len(eventids) != 1:
                 raise AmbiguousRuleException(eventids)
+                # remove all EventID definitions
+            empty_name = []
+            for name, detection in yamldoc["detection"].items():
+                if name == "condition" or type(detection) is not dict:
+                    continue
+                try:
+                    del detection["EventID"]
+                except KeyError:
+                    pass
+
+                if detection == {}:     # detection was reduced to nothing - remove it later
+                    empty_name.append(name)
+
+            for name in empty_name:     # delete empty detections
+                del yamldoc["detection"][name]
+
+            if yamldoc["detection"] == {}:  # delete detection section if empty
+                del yamldoc["detection"]
+
+            # rewrite log source
+            yamldoc["logsource"] = {
+                    "category": "process_creation",
+                    "product":  "windows"
+                    }
+
+            changed = True
     return changed
 
 def get_input_paths(args):
@@ -162,34 +158,36 @@ yaml.add_representer(dict, yaml_preserve_order)
 
 input_paths = get_input_paths(args)
 output = get_output(args.output)
-if args.converted_list:
-    fconv = open(args.converted_list, "w")
-else:
-    fconv = sys.stdout
-
+fconv = open(args.converted_list, "w") if args.converted_list else sys.stdout
 for path in input_paths:
     try:
         f = path.open("r")
     except OSError as e:
-        print("Error while reading Sigma rule {}: {}".format(path, str(e)), file=sys.stderr)
+        print(f"Error while reading Sigma rule {path}: {str(e)}", file=sys.stderr)
         sys.exit(1)
 
     try:
         yamldocs = list(yaml.safe_load_all(f))
     except yaml.YAMLError as e:
-        print("YAML parse error while parsing Sigma rule {}: {}".format(path, str(e)), file=sys.stderr)
+        print(
+            f"YAML parse error while parsing Sigma rule {path}: {str(e)}",
+            file=sys.stderr,
+        )
+
         sys.exit(2)
 
-    yamldoc_num = 0
     changed = False
-    for yamldoc in yamldocs:
-        yamldoc_num += 1
+    for yamldoc_num, yamldoc in enumerate(yamldocs, start=1):
         output.new_output(path)
         try:
             changed |= convert_to_generic(yamldoc)
         except AmbiguousRuleException as e:
             changed = False
-            print("Rule {} in file {} contains multiple EventIDs: {}".format(yamldoc_num, str(path), str(e)), file=sys.stderr)
+            print(
+                f"Rule {yamldoc_num} in file {str(path)} contains multiple EventIDs: {str(e)}",
+                file=sys.stderr,
+            )
+
 
     yamldocs_idx = list(zip(range(len(yamldocs)), yamldocs))
     delete = set()
@@ -219,7 +217,7 @@ for path in input_paths:
             output.write(yaml.dump_all(yamldocs, Dumper=SigmaYAMLDumper, indent=4, width=160, default_flow_style=False))
             print(path, file=fconv)
         except OSError as e:
-            print("Error while writing result: {}".format(str(e)), file=sys.stderr)
+            print(f"Error while writing result: {str(e)}", file=sys.stderr)
             sys.exit(2)
 
 output.finish()

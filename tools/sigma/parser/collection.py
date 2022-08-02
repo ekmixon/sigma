@@ -34,8 +34,8 @@ class SigmaCollectionParser:
             from sigma.configuration import SigmaConfiguration
             config = SigmaConfiguration()
         self.yamls = yaml.safe_load_all(content)
-        globalyaml = dict()
-        self.parsers = list()
+        globalyaml = {}
+        self.parsers = []
         prevrule = None
         if filename:
             try:
@@ -43,7 +43,7 @@ class SigmaCollectionParser:
                 globalyaml['yml_path']=str(filename.parent)
             except:
                 filename = None
-        
+
         for yamldoc in self.yamls:
             action = None
             try:
@@ -55,10 +55,10 @@ class SigmaCollectionParser:
             if action == "global":
                 deep_update_dict(globalyaml, yamldoc)
             elif action == "reset":
-                globalyaml = dict()
+                globalyaml = {}
                 if filename:
                     globalyaml['yml_filename']=str(filename.name)
-                    globalyaml['yml_path']=str(filename.parent) 
+                    globalyaml['yml_path']=str(filename.parent)
             elif action == "repeat":
                 if prevrule is None:
                     raise SigmaCollectionParseError("action 'repeat' is only applicable after first valid Sigma rule")

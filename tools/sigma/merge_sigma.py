@@ -29,7 +29,7 @@ def main():
     try:
         f = open(cmdargs.input, "r")
     except IOError as e:
-        print("Error while opening input file: %s" % str(e), file=sys.stderr)
+        print(f"Error while opening input file: {str(e)}", file=sys.stderr)
         sys.exit(1)
 
     content = "".join(f.readlines())

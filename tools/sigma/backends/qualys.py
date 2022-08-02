@@ -48,13 +48,11 @@ class QualysBackend(SingleTextQueryBackend):
         self.allowedFieldsList = list(set(fl))
 
     def generateORNode(self, node):
-        new_list = []
-        for val in node:
-            if type(val) == tuple and not(val[0] in self.allowedFieldsList):
-                pass
-                # self.PartialMatchFlag = True
-            else:
-                new_list.append(val)
+        new_list = [
+            val
+            for val in node
+            if type(val) != tuple or val[0] in self.allowedFieldsList
+        ]
 
         generated = [self.generateNode(val) for val in new_list]
         filtered = [g for g in generated if g is not None]
@@ -63,7 +61,7 @@ class QualysBackend(SingleTextQueryBackend):
     def generateANDNode(self, node):
         new_list = []
         for val in node:
-            if type(val) == tuple and not(val[0] in self.allowedFieldsList):
+            if type(val) == tuple and val[0] not in self.allowedFieldsList:
                 self.PartialMatchFlag = True
             else:
                 new_list.append(val)
@@ -81,15 +79,17 @@ class QualysBackend(SingleTextQueryBackend):
         elif type(value) == list:
             return self.generateMapItemListNode(key, value)
         else:
-            raise TypeError("Backend does not support map values of type " + str(type(value)))
+            raise TypeError(
+                f"Backend does not support map values of type {str(type(value))}"
+            )
 
     def generateMapItemListNode(self, key, value):
         itemslist = []
         for item in value:
             if key in self.allowedFieldsList:
-                itemslist.append('%s:`%s`' % (key, self.generateValueNode(item)))
+                itemslist.append(f'{key}:`{self.generateValueNode(item)}`')
             else:
-                itemslist.append('%s' % (self.generateValueNode(item)))
+                itemslist.append(f'{self.generateValueNode(item)}')
         return "(" + (" or ".join(itemslist)) + ")"
 
     def generate(self, sigmaparser):
@@ -103,7 +103,7 @@ class QualysBackend(SingleTextQueryBackend):
 
             if self.PartialMatchFlag == True:
                 raise PartialMatchError(query)
-            elif self.PartialMatchFlag == None:
+            elif self.PartialMatchFlag is None:
                 raise FullMatchError(query)
             else:
                 return query

@@ -68,8 +68,7 @@ class DevoBackend(SingleTextQueryBackend):
             else:
                 generated.append(self.generateNode(val))
 
-        filtered = [g for g in generated if g is not None]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             return self.andToken.join(filtered)
         else:
             return None
@@ -82,8 +81,7 @@ class DevoBackend(SingleTextQueryBackend):
             else:
                 generated.append(self.generateNode(val))
 
-        filtered = [g for g in generated if g is not None]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             return self.orToken.join(filtered)
         else:
             return None
@@ -94,20 +92,16 @@ class DevoBackend(SingleTextQueryBackend):
         else:
             generated = self.generateNode(node.item)
 
-        if generated is not None:
-            return self.notToken + generated
-        else:
-            return None
+        return self.notToken + generated if generated is not None else None
 
     def generateSubexpressionNode(self, node):
-        generated = self.generateNode(node.items)
-        if generated:
+        if generated := self.generateNode(node.items):
             return self.subExpression % generated
         else:
             return None
 
     def generateListNode(self, node):
-        if not set([type(value) for value in node]).issubset({str, int}):
+        if not {type(value) for value in node}.issubset({str, int}):
             raise TypeError("List values must be strings or numbers")
         return self.listExpression % (self.listSeparator.join([self.generateNode(value) for value in node]))
 
@@ -140,7 +134,9 @@ class DevoBackend(SingleTextQueryBackend):
             else:
                 return self.mapExpression % (transformed_fieldname, self.generateNode(value))
         else:
-            raise TypeError("Devo backend does not support map values of type " + str(type(value)))
+            raise TypeError(
+                f"Devo backend does not support map values of type {str(type(value))}"
+            )
 
     def generateMapItemListNode(self, key, value):
         return "(" + (" or ".join([self.mapWildcard % (key, self.generateValueNode(item)) for item in value])) + ")"
@@ -160,7 +156,9 @@ class DevoBackend(SingleTextQueryBackend):
         try:
             return self.typedValueExpression[type(node)] % (self.cleanValue(str(node)))
         except KeyError:
-            raise NotImplementedError("Type modifier '{}' is not supported by backend".format(node.identifier))
+            raise NotImplementedError(
+                f"Type modifier '{node.identifier}' is not supported by backend"
+            )
 
     def generateFTS(self, value):
         return self.mapFullTextSearch % self.cleanValue(value)
@@ -169,9 +167,7 @@ class DevoBackend(SingleTextQueryBackend):
         return isinstance(value, str) or isinstance(value, int) or isinstance(value, list)
 
     def fieldNameMapping(self, field, value):
-        # Handle derived fields
-        matched = self.derivedField.search(field)
-        if matched:
+        if matched := self.derivedField.search(field):
             self.derivedFieldSet.add(field)
             return matched.group(1)
         return field
@@ -182,35 +178,42 @@ class DevoBackend(SingleTextQueryBackend):
         # Near operator not supported yet
         if agg.aggfunc == SigmaAggregationParser.AGGFUNC_NEAR:
             raise NotImplementedError("The 'near' aggregation operator is not implemented for the %s backend" % self.identifier)
-        if (agg.aggfunc == SigmaAggregationParser.AGGFUNC_COUNT or
-                agg.aggfunc == SigmaAggregationParser.AGGFUNC_MAX or
-                agg.aggfunc == SigmaAggregationParser.AGGFUNC_MIN or
-                agg.aggfunc == SigmaAggregationParser.AGGFUNC_SUM or
-                agg.aggfunc == SigmaAggregationParser.AGGFUNC_AVG):
+        if agg.aggfunc in [
+            SigmaAggregationParser.AGGFUNC_COUNT,
+            SigmaAggregationParser.AGGFUNC_MAX,
+            SigmaAggregationParser.AGGFUNC_MIN,
+            SigmaAggregationParser.AGGFUNC_SUM,
+            SigmaAggregationParser.AGGFUNC_AVG,
+        ]:
 
-            if agg.groupfield and self.timeframe == None:
+            if agg.groupfield and self.timeframe is None:
                 if self.hasMulticondition:
                     group_by = " group every - by subquery_link,{0}".format(self.fieldNameMapping(agg.groupfield, None))
                 else:
                     group_by = " group by {0}".format(self.fieldNameMapping(agg.groupfield, None))
-            elif agg.groupfield and self.timeframe != None:
+            elif agg.groupfield:
                 if self.hasMulticondition:
                     group_by = " group every {} by subquery_link,{0}".format(self.timeframe,self.fieldNameMapping(agg.groupfield, None))
                 else:
-                    group_by = " group by {} every {}".format(self.fieldNameMapping(agg.groupfield, None), self.timeframe)
+                    group_by = f" group by {self.fieldNameMapping(agg.groupfield, None)} every {self.timeframe}"
+
             else:
                 group_by = ""
 
             if agg.aggfield:
-                select = "{}({}) as agg".format(agg.aggfunc_notrans, self.fieldNameMapping(agg.aggfield, None))
+                select = f"{agg.aggfunc_notrans}({self.fieldNameMapping(agg.aggfield, None)}) as agg"
+
             else:
                 if agg.aggfunc == SigmaAggregationParser.AGGFUNC_COUNT:
-                    select = "{}(*) as agg".format(agg.aggfunc_notrans)
+                    select = f"{agg.aggfunc_notrans}(*) as agg"
                 else:
-                    raise SigmaParseError("For {} aggregation a fieldname needs to be specified".format(agg.aggfunc_notrans))
+                    raise SigmaParseError(
+                        f"For {agg.aggfunc_notrans} aggregation a fieldname needs to be specified"
+                    )
+
 
             if self.derivedFieldSet:
-                derivedFieldsStr = " {}".format(" ".join(self.derivedFieldSet))
+                derivedFieldsStr = f' {" ".join(self.derivedFieldSet)}'
             else:
                 derivedFieldsStr = ""
 
@@ -219,8 +222,9 @@ class DevoBackend(SingleTextQueryBackend):
             else:
                 link_select = ""
 
-            temp_table = "from {}{} where {}{}{} select {}".format(self.table, derivedFieldsStr, where_clause, link_select, group_by, select)
-            agg_condition = "agg {} {}".format(agg.cond_op, agg.condition)
+            temp_table = f"from {self.table}{derivedFieldsStr} where {where_clause}{link_select}{group_by} select {select}"
+
+            agg_condition = f"agg {agg.cond_op} {agg.condition}"
 
             return temp_table, agg_condition
 
@@ -233,10 +237,10 @@ class DevoBackend(SingleTextQueryBackend):
             result = self.generateNode(parsed.parsedSearch)
         if parsed.parsedAgg:
             fro, whe = self.generateAggregation(parsed.parsedAgg, result)
-            return "{} where {} select *".format(fro, whe)
+            return f"{fro} where {whe} select *"
 
         if self.derivedFieldSet:
-            derivedFieldsStr = " {}".format(" ".join(self.derivedFieldSet))
+            derivedFieldsStr = f' {" ".join(self.derivedFieldSet)}'
         else:
             derivedFieldsStr = ""
 
@@ -245,7 +249,7 @@ class DevoBackend(SingleTextQueryBackend):
         else:
             select = "select *"
 
-        return "from {}{} where {} {}".format(self.table, derivedFieldsStr, result, select)
+        return f"from {self.table}{derivedFieldsStr} where {result} {select}"
 
     def generate(self, sigmaparser):
         """Method is called for each sigma rule and receives the parsed rule (SigmaParser)"""
@@ -259,13 +263,7 @@ class DevoBackend(SingleTextQueryBackend):
             self.timeframe = sigmaparser.parsedyaml['detection']['timeframe']
         except:
             self.timeframe = None
-            pass
-        
-        if len(sigmaparser.condparsed) > 1:
-            self.hasMulticondition = True
-        else:
-            self.hasMulticondition = False
-
+        self.hasMulticondition = len(sigmaparser.condparsed) > 1
         results = []
         for parsed in sigmaparser.condparsed:
             # Multi condition rules are not supported yet, only the first one will be processed
@@ -287,7 +285,7 @@ class DevoBackend(SingleTextQueryBackend):
             prefix = 'from siem.logtrust.alert.info select "link" as subquery_link group every 24h by subquery_link where '
             suffix = " select *"
             for i in range(len(results)):
-                results[i] = "subquery_link in ( " + results[i]
+                results[i] = f"subquery_link in ( {results[i]}"
                 results[i] += ")"
 
             body = " or ".join(results)

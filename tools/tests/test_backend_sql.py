@@ -33,61 +33,60 @@ class TestGenerateQuery(unittest.TestCase):
         # Test regular queries
         detection = {"selection": {"fieldname": "test1"},
                      "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE fieldname = "test1"'.format(
-            self.table)
+        expected_result = f'SELECT * FROM {self.table} WHERE fieldname = "test1"'
         self.validate(detection, expected_result)
 
         detection = {"selection": {"fieldname": 4}, "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE fieldname = "4"'.format(
-            self.table)
+        expected_result = f'SELECT * FROM {self.table} WHERE fieldname = "4"'
         self.validate(detection, expected_result)
 
         detection = {"selection": {"fieldname": [
             "test1", "test2"]}, "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE fieldname IN ("test1", "test2")'.format(
-            self.table)
+        expected_result = (
+            f'SELECT * FROM {self.table} WHERE fieldname IN ("test1", "test2")'
+        )
+
         self.validate(detection, expected_result)
 
         detection = {"selection": {
             "fieldname": [3, 4]}, "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE fieldname IN ("3", "4")'.format(
-            self.table)
+        expected_result = f'SELECT * FROM {self.table} WHERE fieldname IN ("3", "4")'
         self.validate(detection, expected_result)
 
         detection = {"selection": {"fieldname1": "test1", "fieldname2": [
             "test2", "test3"]}, "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE (fieldname1 = "test1" AND fieldname2 IN ("test2", "test3"))'.format(
-            self.table)
+        expected_result = f'SELECT * FROM {self.table} WHERE (fieldname1 = "test1" AND fieldname2 IN ("test2", "test3"))'
+
         self.validate(detection, expected_result)
 
         detection = {"selection": {"fieldname": "test1"}, "filter": {
             "fieldname2": "whatever"}, "condition": "selection and filter"}
-        expected_result = 'SELECT * FROM {} WHERE (fieldname = "test1" AND fieldname2 = "whatever")'.format(
-            self.table)
+        expected_result = f'SELECT * FROM {self.table} WHERE (fieldname = "test1" AND fieldname2 = "whatever")'
+
         self.validate(detection, expected_result)
 
         detection = {"selection": {"fieldname": "test1"}, "filter": {
             "fieldname2": "whatever"}, "condition": "selection or filter"}
-        expected_result = 'SELECT * FROM {} WHERE (fieldname = "test1" OR fieldname2 = "whatever")'.format(
-            self.table)
+        expected_result = f'SELECT * FROM {self.table} WHERE (fieldname = "test1" OR fieldname2 = "whatever")'
+
         self.validate(detection, expected_result)
 
         detection = {"selection": {"fieldname": "test1"}, "filter": {
             "fieldname2": "whatever"}, "condition": "selection and not filter"}
-        expected_result = 'SELECT * FROM {} WHERE (fieldname = "test1" AND NOT (fieldname2 = "whatever"))'.format(
-            self.table)
+        expected_result = f'SELECT * FROM {self.table} WHERE (fieldname = "test1" AND NOT (fieldname2 = "whatever"))'
+
         self.validate(detection, expected_result)
 
         detection = {"selection": {"fieldname1": "test1"}, "filter": {
             "fieldname2": "test2"}, "condition": "1 of them"}
-        expected_result = 'SELECT * FROM {} WHERE (fieldname1 = "test1" OR fieldname2 = "test2")'.format(
-            self.table)
+        expected_result = f'SELECT * FROM {self.table} WHERE (fieldname1 = "test1" OR fieldname2 = "test2")'
+
         self.validate(detection, expected_result)
 
         detection = {"selection": {"fieldname1": "test1"}, "filter": {
             "fieldname2": "test2"}, "condition": "all of them"}
-        expected_result = 'SELECT * FROM {} WHERE (fieldname1 = "test1" AND fieldname2 = "test2")'.format(
-            self.table)
+        expected_result = f'SELECT * FROM {self.table} WHERE (fieldname1 = "test1" AND fieldname2 = "test2")'
+
         self.validate(detection, expected_result)
 
     def test_modifiers(self):
@@ -95,29 +94,29 @@ class TestGenerateQuery(unittest.TestCase):
         # contains
         detection = {"selection": {"fieldname|contains": "test"},
                      "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE fieldname LIKE "%test%" ESCAPE \'\\\''.format(
-            self.table)
+        expected_result = f"""SELECT * FROM {self.table} WHERE fieldname LIKE "%test%" ESCAPE \'\\\'"""
+
         self.validate(detection, expected_result)
 
         # all
         detection = {"selection": {"fieldname|all": [
             "test1", "test2"]}, "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE (fieldname = "test1" AND fieldname = "test2")'.format(
-            self.table)
+        expected_result = f'SELECT * FROM {self.table} WHERE (fieldname = "test1" AND fieldname = "test2")'
+
         self.validate(detection, expected_result)
 
         # endswith
         detection = {"selection": {"fieldname|endswith": "test"},
                      "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE fieldname LIKE "%test" ESCAPE \'\\\''.format(
-            self.table)
+        expected_result = f"""SELECT * FROM {self.table} WHERE fieldname LIKE "%test" ESCAPE \'\\\'"""
+
         self.validate(detection, expected_result)
 
         # startswith
         detection = {"selection": {"fieldname|startswith": "test"},
                      "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE fieldname LIKE "test%" ESCAPE \'\\\''.format(
-            self.table)
+        expected_result = f"""SELECT * FROM {self.table} WHERE fieldname LIKE "test%" ESCAPE \'\\\'"""
+
         self.validate(detection, expected_result)
 
     def test_aggregations(self):
@@ -125,73 +124,75 @@ class TestGenerateQuery(unittest.TestCase):
         # count
         detection = {"selection": {"fieldname": "test"},
                      "condition": "selection | count() > 5"}
-        inner_query = 'SELECT *,count(*) AS agg FROM {} WHERE fieldname = "test"'.format(
-            self.table)
-        expected_result = 'SELECT * FROM ({}) WHERE agg > 5'.format(inner_query)
+        inner_query = (
+            f'SELECT *,count(*) AS agg FROM {self.table} WHERE fieldname = "test"'
+        )
+
+        expected_result = f'SELECT * FROM ({inner_query}) WHERE agg > 5'
         self.validate(detection, expected_result)
 
         # min
         detection = {"selection": {"fieldname1": "test"},
                      "condition": "selection | min(fieldname2) > 5"}
-        inner_query = 'SELECT *,min(fieldname2) AS agg FROM {} WHERE fieldname1 = "test"'.format(
-            self.table)
-        expected_result = 'SELECT * FROM ({}) WHERE agg > 5'.format(inner_query)
+        inner_query = f'SELECT *,min(fieldname2) AS agg FROM {self.table} WHERE fieldname1 = "test"'
+
+        expected_result = f'SELECT * FROM ({inner_query}) WHERE agg > 5'
         self.validate(detection, expected_result)
 
         # max
         detection = {"selection": {"fieldname1": "test"},
                      "condition": "selection | max(fieldname2) > 5"}
-        inner_query = 'SELECT *,max(fieldname2) AS agg FROM {} WHERE fieldname1 = "test"'.format(
-            self.table)
-        expected_result = 'SELECT * FROM ({}) WHERE agg > 5'.format(inner_query)
+        inner_query = f'SELECT *,max(fieldname2) AS agg FROM {self.table} WHERE fieldname1 = "test"'
+
+        expected_result = f'SELECT * FROM ({inner_query}) WHERE agg > 5'
         self.validate(detection, expected_result)
 
         # avg
         detection = {"selection": {"fieldname1": "test"},
                      "condition": "selection | avg(fieldname2) > 5"}
-        inner_query = 'SELECT *,avg(fieldname2) AS agg FROM {} WHERE fieldname1 = "test"'.format(
-            self.table)
-        expected_result = 'SELECT * FROM ({}) WHERE agg > 5'.format(inner_query)
+        inner_query = f'SELECT *,avg(fieldname2) AS agg FROM {self.table} WHERE fieldname1 = "test"'
+
+        expected_result = f'SELECT * FROM ({inner_query}) WHERE agg > 5'
         self.validate(detection, expected_result)
 
         # sum
         detection = {"selection": {"fieldname1": "test"},
                      "condition": "selection | sum(fieldname2) > 5"}
-        inner_query = 'SELECT *,sum(fieldname2) AS agg FROM {} WHERE fieldname1 = "test"'.format(
-            self.table)
-        expected_result = 'SELECT * FROM ({}) WHERE agg > 5'.format(inner_query)
+        inner_query = f'SELECT *,sum(fieldname2) AS agg FROM {self.table} WHERE fieldname1 = "test"'
+
+        expected_result = f'SELECT * FROM ({inner_query}) WHERE agg > 5'
         self.validate(detection, expected_result)
 
         # <
         detection = {"selection": {"fieldname1": "test"},
                      "condition": "selection | sum(fieldname2) < 5"}
-        inner_query = 'SELECT *,sum(fieldname2) AS agg FROM {} WHERE fieldname1 = "test"'.format(
-            self.table)
-        expected_result = 'SELECT * FROM ({}) WHERE agg < 5'.format(inner_query)
+        inner_query = f'SELECT *,sum(fieldname2) AS agg FROM {self.table} WHERE fieldname1 = "test"'
+
+        expected_result = f'SELECT * FROM ({inner_query}) WHERE agg < 5'
         self.validate(detection, expected_result)
 
         # ==
         detection = {"selection": {"fieldname1": "test"},
                      "condition": "selection | sum(fieldname2) == 5"}
-        inner_query = 'SELECT *,sum(fieldname2) AS agg FROM {} WHERE fieldname1 = "test"'.format(
-            self.table)
-        expected_result = 'SELECT * FROM ({}) WHERE agg == 5'.format(inner_query)
+        inner_query = f'SELECT *,sum(fieldname2) AS agg FROM {self.table} WHERE fieldname1 = "test"'
+
+        expected_result = f'SELECT * FROM ({inner_query}) WHERE agg == 5'
         self.validate(detection, expected_result)
 
         # group by
         detection = {"selection": {"fieldname1": "test"},
                      "condition": "selection | sum(fieldname2) by fieldname3 == 5"}
-        inner_query = 'SELECT *,sum(fieldname2) AS agg FROM {} WHERE fieldname1 = "test" GROUP BY fieldname3'.format(
-            self.table)
-        expected_result = 'SELECT * FROM ({}) WHERE agg == 5'.format(inner_query)
+        inner_query = f'SELECT *,sum(fieldname2) AS agg FROM {self.table} WHERE fieldname1 = "test" GROUP BY fieldname3'
+
+        expected_result = f'SELECT * FROM ({inner_query}) WHERE agg == 5'
         self.validate(detection, expected_result)
 
         # multiple conditions
         detection = {"selection": {"fieldname1": "test"}, "filter": {
             "fieldname2": "tessst"}, "condition": "selection OR filter | sum(fieldname2) == 5"}
-        inner_query = 'SELECT *,sum(fieldname2) AS agg FROM {} WHERE (fieldname1 = "test" OR fieldname2 = "tessst")'.format(
-            self.table)
-        expected_result = 'SELECT * FROM ({}) WHERE agg == 5'.format(inner_query)
+        inner_query = f'SELECT *,sum(fieldname2) AS agg FROM {self.table} WHERE (fieldname1 = "test" OR fieldname2 = "tessst")'
+
+        expected_result = f'SELECT * FROM ({inner_query}) WHERE agg == 5'
         self.validate(detection, expected_result)
 
     def test_wildcards(self):
@@ -199,58 +200,76 @@ class TestGenerateQuery(unittest.TestCase):
         # wildcard: *
         detection = {"selection": {"fieldname": "test*"},
                      "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE fieldname LIKE '.format(
-            self.table) + r'"test%"' + r" ESCAPE '\'"
+        expected_result = (
+            f'SELECT * FROM {self.table} WHERE fieldname LIKE ' + r'"test%"'
+        ) + r" ESCAPE '\'"
+
         self.validate(detection, expected_result)
 
         # wildcard: ?
         detection = {"selection": {"fieldname": "test?"},
                      "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE fieldname LIKE '.format(
-            self.table) + r'"test_"' + r" ESCAPE '\'"
+        expected_result = (
+            f'SELECT * FROM {self.table} WHERE fieldname LIKE ' + r'"test_"'
+        ) + r" ESCAPE '\'"
+
         self.validate(detection, expected_result)
 
         # escaping:
         detection = {"selection": {"fieldname": r"test\?"},
                      "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE fieldname LIKE '.format(
-            self.table) + r'"test\?"' + r" ESCAPE '\'"
+        expected_result = (
+            f'SELECT * FROM {self.table} WHERE fieldname LIKE ' + r'"test\?"'
+        ) + r" ESCAPE '\'"
+
         self.validate(detection, expected_result)
 
         detection = {"selection": {"fieldname": r"test\\*"},
                      "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE fieldname LIKE '.format(
-            self.table) + r'"test\\%"' + r" ESCAPE '\'"
+        expected_result = (
+            f'SELECT * FROM {self.table} WHERE fieldname LIKE ' + r'"test\\%"'
+        ) + r" ESCAPE '\'"
+
         self.validate(detection, expected_result)
 
         detection = {"selection": {"fieldname": r"test\*"},
                      "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE fieldname LIKE '.format(
-            self.table) + r'"test\*"' + r" ESCAPE '\'"
+        expected_result = (
+            f'SELECT * FROM {self.table} WHERE fieldname LIKE ' + r'"test\*"'
+        ) + r" ESCAPE '\'"
+
         self.validate(detection, expected_result)
 
         detection = {"selection": {"fieldname": r"test\\"},
                      "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE fieldname LIKE '.format(
-            self.table) + r'"test\\"' + r" ESCAPE '\'"
+        expected_result = (
+            f'SELECT * FROM {self.table} WHERE fieldname LIKE ' + r'"test\\"'
+        ) + r" ESCAPE '\'"
+
         self.validate(detection, expected_result)
 
         detection = {"selection": {"fieldname": r"test\abc"},
                      "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE fieldname LIKE '.format(
-            self.table) + r'"test\\abc"' + r" ESCAPE '\'"
+        expected_result = (
+            f'SELECT * FROM {self.table} WHERE fieldname LIKE ' + r'"test\\abc"'
+        ) + r" ESCAPE '\'"
+
         self.validate(detection, expected_result)
 
         detection = {"selection": {"fieldname": r"test%"},
                      "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE fieldname LIKE '.format(
-            self.table) + r'"test\%"' + r" ESCAPE '\'"
+        expected_result = (
+            f'SELECT * FROM {self.table} WHERE fieldname LIKE ' + r'"test\%"'
+        ) + r" ESCAPE '\'"
+
         self.validate(detection, expected_result)
 
         detection = {"selection": {"fieldname": r"test_"},
                      "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE fieldname LIKE '.format(
-            self.table) + r'"test\_"' + r" ESCAPE '\'"
+        expected_result = (
+            f'SELECT * FROM {self.table} WHERE fieldname LIKE ' + r'"test\_"'
+        ) + r" ESCAPE '\'"
+
         self.validate(detection, expected_result)
 
         # multiple options
@@ -258,23 +277,23 @@ class TestGenerateQuery(unittest.TestCase):
             "test*", "*test"]}, "condition": "selection"}
         opt1 = 'fieldname LIKE ' + r'"test%"' + r" ESCAPE '\'"
         opt2 = 'fieldname LIKE ' + r'"%test"' + r" ESCAPE '\'"
-        expected_result = 'SELECT * FROM {} WHERE ({} OR {})'.format(
-            self.table, opt1, opt2)
+        expected_result = f'SELECT * FROM {self.table} WHERE ({opt1} OR {opt2})'
         self.validate(detection, expected_result)
 
         detection = {"selection": {"fieldname|all": [
             "test*", "*test"]}, "condition": "selection"}
         opt1 = 'fieldname LIKE ' + r'"test%"' + r" ESCAPE '\'"
         opt2 = 'fieldname LIKE ' + r'"%test"' + r" ESCAPE '\'"
-        expected_result = 'SELECT * FROM {} WHERE ({} AND {})'.format(
-            self.table, opt1, opt2)
+        expected_result = f'SELECT * FROM {self.table} WHERE ({opt1} AND {opt2})'
         self.validate(detection, expected_result)
 
     def test_fieldname_mapping(self):
         detection = {"selection": {"fieldname": "test1"},
                      "condition": "selection"}
-        expected_result = 'SELECT * FROM {} WHERE mapped_fieldname = "test1"'.format(
-            self.table)
+        expected_result = (
+            f'SELECT * FROM {self.table} WHERE mapped_fieldname = "test1"'
+        )
+
 
         # configure mapping
         config = SigmaConfiguration()

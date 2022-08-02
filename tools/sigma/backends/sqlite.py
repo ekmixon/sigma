@@ -58,8 +58,7 @@ class SQLiteBackend(SQLBackend):
             return self.generateFTS(fts)
 
         generated = [self.generateNode(val) for val in node]
-        filtered = [g for g in generated if g is not None]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             return self.andToken.join(filtered)
         else:
             return None
@@ -72,8 +71,7 @@ class SQLiteBackend(SQLBackend):
             return self.generateFTS(fts)
 
         generated = [self.generateNode(val) for val in node]
-        filtered = [g for g in generated if g is not None]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             return self.orToken.join(filtered)
         else:
             return None
@@ -131,7 +129,9 @@ class SQLiteBackend(SQLBackend):
                 return self.mapWildcard % (transformed_fieldname, generated_value)
             else:
                 raise TypeError(
-                    "Backend does not support map values of type " + str(type(value)))
+                    f"Backend does not support map values of type {str(type(value))}"
+                )
+
         finally:
             self.mappingItem = False
 
@@ -151,5 +151,7 @@ class SQLiteBackend(SQLBackend):
     def checkFTS(self, parsed, result):
         if self.countFTS > 1:
             raise NotImplementedError(
-                "Match operator ({}) is allowed only once in SQLite, parse rule in a different way:\n{}".format(self.countFTS, result))
+                f"Match operator ({self.countFTS}) is allowed only once in SQLite, parse rule in a different way:\n{result}"
+            )
+
         self.countFTS = 0

@@ -50,13 +50,15 @@ class SigmaConfigurationManager(object):
                         )
                         if path.exists()
                     ]
-        elif isinstance(paths, Iterable) and all([type(path) is str for path in paths]):
+        elif isinstance(paths, Iterable) and all(
+            type(path) is str for path in paths
+        ):
             self.paths = [Path(path) for path in paths]
         else:
             raise TypeError("None or iterable of strings expected as paths")
 
-        self.configs = dict()
-        self.errors = list()
+        self.configs = {}
+        self.errors = []
         self.update()
 
     def update(self):
@@ -74,7 +76,14 @@ class SigmaConfigurationManager(object):
 
     def list(self):
         """Returns a list of (identifier, title) tuples of found configurations."""
-        return [ (conf_id, config.config.setdefault("title", ""), config.config.setdefault("backends", list())) for conf_id, config in self.configs.items() ]
+        return [
+            (
+                conf_id,
+                config.config.setdefault("title", ""),
+                config.config.setdefault("backends", []),
+            )
+            for conf_id, config in self.configs.items()
+        ]
 
     def get(self, name):
         """

@@ -259,17 +259,20 @@ class LaceworkBackend(SingleTextQueryBackend):
         elif isinstance(node, SigmaTypeModifier):
             return self.applyOverrides(self.generateTypedValueNode(node))
         else:
-            raise TypeError("Node type %s was not expected in Sigma parse tree" % (str(type(node))))
+            raise TypeError(
+                f"Node type {str(type(node))} was not expected in Sigma parse tree"
+            )
 
     def applySelfJoinFilter(self, node, query):
         if type(node) != tuple:
-            raise NotImplementedError('selfJoinFilter is not wired up for node type %s' % (str(type(node))))
+            raise NotImplementedError(
+                f'selfJoinFilter is not wired up for node type {str(type(node))}'
+            )
+
         fieldname, value = node
 
         sjf = self._get_self_join_filter(fieldname)
-        if not sjf:
-            return query
-        return sjf.replace('$query$', query)
+        return sjf.replace('$query$', query) if sjf else query
 
     def generateValueNode(self, node):
         """
@@ -332,10 +335,9 @@ class LaceworkBackend(SingleTextQueryBackend):
             return f"{transformed_fieldname} LIKE {new_value}"
         if isinstance(value, (str, int)):
             return self.mapExpression % (transformed_fieldname, self.generateNode(value))
-        # mapListsHandling
         elif type(value) == list:
             # if a list contains values with wildcards we can't use standard handling ("in")
-            if any([x for x in value if x.startswith('*') or x.endswith('*')]):
+            if any(x for x in value if x.startswith('*') or x.endswith('*')):
                 node = NodeSubexpression(
                     ConditionOR(None, None, *[(transformed_fieldname, x) for x in value])
                 )
@@ -598,13 +600,7 @@ class LaceworkQuery:
         ):
             return True
         # if we are explicitly requesting a policy
-        if (
-            'policy' in backend_options
-            and backend_options['policy'] is True
-        ):
-            return False
-        # we're not being explicit about anything
-        return True
+        return 'policy' not in backend_options or backend_options['policy'] is not True
 
     @staticmethod
     def get_logsource(rule):
@@ -618,25 +614,22 @@ class LaceworkQuery:
     @staticmethod
     def get_logsource_config(config, logsource_type, logsource_name):
         config = safe_get(config, logsource_type, dict)
-        logsource_config = safe_get(config, logsource_name, dict)
-
-        # 1. validate logsource service
-        if not logsource_config:
+        if logsource_config := safe_get(config, logsource_name, dict):
+            return logsource_config
+        else:
             raise BackendError(
                 f'Log source {logsource_name} is not supported by the Lacework backend')
-
-        return logsource_config
 
     @staticmethod
     def get_evaluator_id(logsource_name, logsource_config):
         # 3. validate service has an evaluatorId mapping
         evaluator_id = safe_get(logsource_config, 'evaluatorId', str)
-        return evaluator_id if evaluator_id else None
+        return evaluator_id or None
 
     @staticmethod
     def get_eval_frequency(logsource_name, logsource_config):
         eval_frequency = safe_get(logsource_config, 'evalFrequency', str)
-        return eval_frequency if eval_frequency else LaceworkQuery.DEFAULT_EVAL_FREQUENCY
+        return eval_frequency or LaceworkQuery.DEFAULT_EVAL_FREQUENCY
 
     @staticmethod
     def get_query_id(rule):
@@ -648,24 +641,19 @@ class LaceworkQuery:
 
     @staticmethod
     def get_query_source(logsource_name, logsource_config):
-        # 4. validate service has a source mapping
-        source = safe_get(logsource_config, 'source', str)
-
-        if not source:
+        if source := safe_get(logsource_config, 'source', str):
+            return source
+        else:
             raise BackendError(
                 f'Lacework backend could not determine source for logsource {logsource_name}')
 
-        return source
-
     @staticmethod
     def get_query_returns(logsource_name, logsource_config):
-        returns = safe_get(logsource_config, 'returns', list)
-
-        if not returns:
+        if returns := safe_get(logsource_config, 'returns', list):
+            return returns
+        else:
             raise BackendError(
                 f'Lacework backend could not determine returns for logsource {logsource_name}')
-
-        return returns
 
     @staticmethod
     def get_query_filter_block(backend, rule_conditions, config_conditions):
@@ -787,20 +775,12 @@ class LaceworkPolicy:
         ):
             return True
         # if we are explicitly requesting a policy
-        if (
-            'query' in backend_options
-            and backend_options['query'] is True
-        ):
-            return False
-        # we're not being explicit about anything
-        return True
+        return 'query' not in backend_options or backend_options['query'] is not True
 
     @staticmethod
     def get_alert_profile(logsource_name, logsource_config):
-        alert_profile = safe_get(logsource_config, 'alertProfile', str)
-
-        if not alert_profile:
+        if alert_profile := safe_get(logsource_config, 'alertProfile', str):
+            return alert_profile
+        else:
             raise BackendError(
                 f'Lacework backend could not determine alert profile for logsource {logsource_name}')
-
-        return alert_profile

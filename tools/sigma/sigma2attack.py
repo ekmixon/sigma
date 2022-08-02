@@ -57,10 +57,7 @@ def main():
                         num_rules_no_tags += 1
                     double = True # action globle no tag
                     continue
-                if not "status" in rule:
-                    status_name = "experimental"
-                else:
-                    status_name = rule["status"]
+                status_name = "experimental" if "status" not in rule else rule["status"]
                 status_nb = status_eq[status_name]
                 if status_nb <status_start or status_nb>status_end:
                     sys.stderr.write(f"Ignoring rule {rule_file} filter status : {status_name}\n")
@@ -112,11 +109,11 @@ def main():
         "domain": "enterprise-attack",
         "description": "Sigma rules heatmap",
         "gradient": {
-		    "colors": [
-			    "#66b1ffff",
-			    "#ff66f4ff",
-			    "#ff6666ff"
-		    ],
+    "colors": [
+    "#66b1ffff",
+    "#ff66f4ff",
+    "#ff6666ff"
+    ],
             "maxValue": curr_max_technique_count,
             "minValue": 0
         },
@@ -127,14 +124,14 @@ def main():
     with open(args.out_file, "w",encoding="UTF-8") as f:
         f.write(json.dumps(output, indent=4, ensure_ascii=False))
         print(f"[*] Layer file written in {args.out_file} ({str(num_rules_used)} rules)")
-        if num_rules_no_tags>0 :
+        if num_rules_no_tags>0:
             print(f"[-] Ignored  {num_rules_no_tags} rules without tags")
         else:
-            print(f"[*] No rule without tags")
+            print("[*] No rule without tags")
         if num_rules_no_techniques>0:
             print(f"[-] Ignored {num_rules_no_techniques} rules whitout Mitre Technique")
         else:
-            print(f"[*] No rule whitout Mitre Technique")
+            print("[*] No rule whitout Mitre Technique")
 
 if __name__ == "__main__":
     main()

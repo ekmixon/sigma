@@ -49,10 +49,10 @@ class NetWitnessBackend(SingleTextQueryBackend):
                 value = re.sub('([".^$]|\\\\(?![*?]))', '\\\\\g<1>', value)
                 value = re.sub('\\*', '.*', value)
                 value = re.sub('\\?', '.', value)
-                return "(%s regex %s)" %(key, self.generateValueNode(value))
+                return f"({key} regex {self.generateValueNode(value)})"
             elif type(value) == str and "*" in value:
                 value = re.sub("(\*\\\\)|(\*)", "", value)
-                return "(%s contains %s)" % (key, self.generateValueNode(value))
+                return f"({key} contains {self.generateValueNode(value)})"
             elif type(value) in (str, int):
                 return self.mapExpression % (key, self.generateValueNode(value))
             else:
@@ -62,12 +62,14 @@ class NetWitnessBackend(SingleTextQueryBackend):
         elif value is None:
             return self.nullExpression % (key, )
         else:
-            raise TypeError("Backend does not support map values of type " + str(type(value)))
+            raise TypeError(
+                f"Backend does not support map values of type {str(type(value))}"
+            )
 
     def generateMapItemListNode(self, key, value):
-        equallist = list()
-        containlist = list()
-        regexlist = list()
+        equallist = []
+        containlist = []
+        regexlist = []
         for item in value:
             if type(item) == str and "*" in item[1:-1]:
                 item = re.sub('([".^$]|\\\\(?![*?]))', '\\\\\g<1>', item)
@@ -80,15 +82,14 @@ class NetWitnessBackend(SingleTextQueryBackend):
                 containlist.append(self.generateValueNode(item))
             else:
                 equallist.append(self.generateValueNode(item))
-        fmtitems = list()
+        fmtitems = []
         if equallist:
-            fmtitems.append("%s = %s" % (key, ", ".join(equallist)))
+            fmtitems.append(f'{key} = {", ".join(equallist)}')
         if containlist:
-            fmtitems.append("%s contains %s" % (key, ", ".join(containlist)))
+            fmtitems.append(f'{key} contains {", ".join(containlist)}')
         if regexlist:
-            fmtitems.append("%s regex %s" % (key, ", ".join(regexlist)))
-        fmtquery = "("+" || ".join(filter(None, fmtitems))+")"
-        return fmtquery
+            fmtitems.append(f'{key} regex {", ".join(regexlist)}')
+        return "("+" || ".join(filter(None, fmtitems))+")"
 
     def generateValueNode(self, node):
         return self.valueExpression % (str(node))
@@ -99,9 +100,7 @@ class NetWitnessBackend(SingleTextQueryBackend):
             if k.startswith('keyword'):
                 raise NotImplementedError("Backend does not support keywords")
         for parsed in sigmaparser.condparsed:
-            query = self.generateQuery(parsed, sigmaparser)
-            return query
+            return self.generateQuery(parsed, sigmaparser)
 
     def generateQuery(self, parsed, sigmaparser):
-        result = self.generateNode(parsed.parsedSearch)
-        return result
+        return self.generateNode(parsed.parsedSearch)

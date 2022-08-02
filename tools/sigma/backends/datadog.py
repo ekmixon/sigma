@@ -117,7 +117,4 @@ class DatadogLogsBackend(SingleTextQueryBackend):
         return super().generateNotNULLValueNode(self.wrap_key(node))
 
     def wrap_key(self, key):
-        if key not in self.tags:
-            return "@%s" % key
-        else:
-            return key
+        return f"@{key}" if key not in self.tags else key

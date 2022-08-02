@@ -35,19 +35,19 @@ class GrepBackend(BaseBackend, QuoteCharMixin):
         return re.sub("\\*", ".*", val)
 
     def generateORNode(self, node):
-        return "(?:%s)" % "|".join([".*" + self.generateNode(val) for val in node])
+        return f'(?:{"|".join([f".*{self.generateNode(val)}" for val in node])})'
 
     def generateANDNode(self, node):
-        return "".join(["(?=.*%s)" % self.generateNode(val) for val in node])
+        return "".join([f"(?=.*{self.generateNode(val)})" for val in node])
 
     def generateNOTNode(self, node):
-        return "(?!.*%s)" % self.generateNode(node.item)
+        return f"(?!.*{self.generateNode(node.item)})"
 
     def generateSubexpressionNode(self, node):
-        return "(?:.*%s)" % self.generateNode(node.items)
+        return f"(?:.*{self.generateNode(node.items)})"
 
     def generateListNode(self, node):
-        if not set([type(value) for value in node]).issubset({str, int}):
+        if not {type(value) for value in node}.issubset({str, int}):
             raise TypeError("List values must be strings or numbers")
         return self.generateORNode(node)
 
@@ -63,4 +63,4 @@ class GrepBackend(BaseBackend, QuoteCharMixin):
 
     def generateNULLValueNode(self, node):
         key, value = node
-        return "(?!%s)" % key
+        return f"(?!{key})"

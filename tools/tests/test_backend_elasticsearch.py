@@ -31,7 +31,11 @@ def test_backend_elastic():
     assert ("GroupField_count" in backend.queries[0]["aggs"]), "GroupField_count is the top aggregation key"
     assert ("aggfield_distinct" in backend.queries[0]["aggs"]["GroupField_count"]["aggs"]), "aggfield_distinct is the nested aggregation key"
     assert ("GroupField_count" in backend.queries[0]["aggs"]), "GroupField_count is the top aggregation key"
-    assert "{}.keyword".format(agg.aggfield) == inner_agg["aggfield_distinct"]["cardinality"]["field"], "inner agg field must have suffix .keyword"
+    assert (
+        f"{agg.aggfield}.keyword"
+        == inner_agg["aggfield_distinct"]["cardinality"]["field"]
+    ), "inner agg field must have suffix .keyword"
+
     assert ("params.count < 3" in bucket_selector["script"]), "bucket selector script must be 'params.count < 3'"
     assert "count" in bucket_selector["buckets_path"], "buckets_path must be 'count'"
 

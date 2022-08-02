@@ -30,7 +30,7 @@ import argparse
 
 def get_sigmac(name,conf):
     infos = []
-    if conf == None:
+    if conf is None:
         options = ["python","../tools/sigmac","-t",name,"--debug","-rI","-o","dump.txt","../rules"]
     else:
         options = ["python","../tools/sigmac","-t",name,"-c",conf,"--debug","-rI","-o","dump.txt","../rules"]
@@ -48,8 +48,8 @@ def get_sigmac(name,conf):
                              stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT,
                              )
-        my_regex = "Convertion Sigma input \S+/(\w+\.yml) (\w+)"   
-    if not ret.returncode == 0:
+        my_regex = "Convertion Sigma input \S+/(\w+\.yml) (\w+)"
+    if ret.returncode != 0:
         print (f"error {ret.returncode} in sigmac")
     log = pathlib.Path("sigmac.log")
     with log.open() as f:
@@ -131,17 +131,14 @@ argparser = argparse.ArgumentParser(description="Check Sigma rules with all back
 argparser.add_argument("--target", "-t", choices=["yaml","json"], help="Output target format")
 cmdargs = argparser.parse_args()
 
-if cmdargs.target == None:
+if cmdargs.target is None:
     print("No outpout use -h to see help")
     exit()
-  
-#init dict of all rules
-default_key_test = {key : "NO TEST" for key in backend_dict.keys()}
-the_dico ={}
-rules = pathlib.Path("../rules").glob("**/*.yml")
-for rule in rules:
-    the_dico[rule.name] = copy.deepcopy(default_key_test)
 
+#init dict of all rules
+default_key_test = {key: "NO TEST" for key in backend_dict}
+rules = pathlib.Path("../rules").glob("**/*.yml")
+the_dico = {rule.name: copy.deepcopy(default_key_test) for rule in rules}
 #Check all the backend    
 for name,opt in backend_dict.items():
     print (f"check backend : {name}")

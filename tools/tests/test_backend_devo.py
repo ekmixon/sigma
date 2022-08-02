@@ -33,67 +33,74 @@ class TestDevoBackend(unittest.TestCase):
         # Int value
         detection = {"selection1": {"fieldname1": 1},
                     "condition": "selection1"}
-        expected_result = 'from {} where fieldname1 = 1 select *'.format(self.table)
+        expected_result = f'from {self.table} where fieldname1 = 1 select *'
         self.validate(detection, expected_result)
 
         # String value
         detection = {"selection1": {"fieldname1": "value1"},
                      "condition": "selection1"}
-        expected_result = 'from {} where fieldname1 = "value1" select *'.format(self.table)
+        expected_result = f'from {self.table} where fieldname1 = "value1" select *'
         self.validate(detection, expected_result)
 
         # Int array value
         detection = {"selection1": {"fieldname1": [1, 2, 3]},
                      "condition": "selection1"}
-        expected_result = 'from {} where has(fieldname1, 1, 2, 3) select *'.format(self.table)
+        expected_result = f'from {self.table} where has(fieldname1, 1, 2, 3) select *'
         self.validate(detection, expected_result)
 
         # String array value
         detection = {"selection1": {"fieldname1": ["value1", "value2", "value3"]},
                      "condition": "selection1"}
-        expected_result = 'from {} where has(fieldname1, "value1", "value2", "value3") select *'.format(self.table)
+        expected_result = f'from {self.table} where has(fieldname1, "value1", "value2", "value3") select *'
+
         self.validate(detection, expected_result)
 
         # Simple and
         detection = {"selection1": {"fieldname1": ["value1", "value2", "value3"],
                                     "fieldname2": "value5"},
                      "condition": "selection1"}
-        expected_result = 'from {} where (has(fieldname1, "value1", "value2", "value3") and fieldname2 = "value5") select *'.format(self.table)
+        expected_result = f'from {self.table} where (has(fieldname1, "value1", "value2", "value3") and fieldname2 = "value5") select *'
+
         self.validate(detection, expected_result)
 
         # Selection and
         detection = {"selection1": {"fieldname1": [1, 2, 3]},
                      "selection2": {"fieldname2": "value5"},
                      "condition": "selection1 and selection2"}
-        expected_result = 'from {} where (has(fieldname1, 1, 2, 3) and fieldname2 = "value5") select *'.format(self.table)
+        expected_result = f'from {self.table} where (has(fieldname1, 1, 2, 3) and fieldname2 = "value5") select *'
+
         self.validate(detection, expected_result)
 
         # Selection or
         detection = {"selection1": {"fieldname1": [1, 2, 3]},
                      "selection2": {"fieldname2": "value5"},
                      "condition": "selection1 or selection2"}
-        expected_result = 'from {} where (has(fieldname1, 1, 2, 3) or fieldname2 = "value5") select *'.format(self.table)
+        expected_result = f'from {self.table} where (has(fieldname1, 1, 2, 3) or fieldname2 = "value5") select *'
+
         self.validate(detection, expected_result)
 
         # Selection one of them
         detection = {"selection1": {"fieldname1": [1, 2, 3]},
                      "selection2": {"fieldname2": "value5"},
                      "condition": "1 of them"}
-        expected_result = 'from {} where (has(fieldname1, 1, 2, 3) or fieldname2 = "value5") select *'.format(self.table)
+        expected_result = f'from {self.table} where (has(fieldname1, 1, 2, 3) or fieldname2 = "value5") select *'
+
         self.validate(detection, expected_result)
 
         # Selection all of them
         detection = {"selection1": {"fieldname1": [1, 2, 3]},
                      "selection2": {"fieldname2": "value5"},
                      "condition": "all of them"}
-        expected_result = 'from {} where (has(fieldname1, 1, 2, 3) and fieldname2 = "value5") select *'.format(self.table)
+        expected_result = f'from {self.table} where (has(fieldname1, 1, 2, 3) and fieldname2 = "value5") select *'
+
         self.validate(detection, expected_result)
 
         # Negation
         detection = {"selection1": {"fieldname1": [1, 2, 3]},
                      "selection2": {"fieldname2": "value5"},
                      "condition": "selection1 and not selection2"}
-        expected_result = 'from {} where (has(fieldname1, 1, 2, 3) and  not (fieldname2 = "value5")) select *'.format(self.table)
+        expected_result = f'from {self.table} where (has(fieldname1, 1, 2, 3) and  not (fieldname2 = "value5")) select *'
+
         self.validate(detection, expected_result)
 
 
@@ -101,96 +108,114 @@ class TestDevoBackend(unittest.TestCase):
         # Contains
         detection = {"selection1": {"fieldname1|contains": "value1"},
                      "condition": "selection1"}
-        expected_result = 'from {} where toktains(fieldname1, "value1", true, true) select *'.format(self.table)
+        expected_result = f'from {self.table} where toktains(fieldname1, "value1", true, true) select *'
+
         self.validate(detection, expected_result)
 
         # StartsWith
         detection = {"selection1": {"fieldname1|startswith": "value1"},
                      "condition": "selection1"}
-        expected_result = 'from {} where matches(fieldname1, nameglob("value1*")) select *'.format(self.table)
+        expected_result = f'from {self.table} where matches(fieldname1, nameglob("value1*")) select *'
+
         self.validate(detection, expected_result)
 
         # EndsWith
         detection = {"selection1": {"fieldname1|endswith": "value1"},
                      "condition": "selection1"}
-        expected_result = 'from {} where matches(fieldname1, nameglob("*value1")) select *'.format(self.table)
+        expected_result = f'from {self.table} where matches(fieldname1, nameglob("*value1")) select *'
+
         self.validate(detection, expected_result)
 
         # All
         detection = {"selection1": {"fieldname1|all": ["value1", "value2"]},
                      "condition": "selection1"}
-        expected_result = 'from {} where (fieldname1 = "value1" and fieldname1 = "value2") select *'.format(self.table)
+        expected_result = f'from {self.table} where (fieldname1 = "value1" and fieldname1 = "value2") select *'
+
         self.validate(detection, expected_result)
 
     def testAggregations(self):
         # Count
         detection = {"selection1": {"fieldname1": "value1"},
                      "condition": "selection1 | count() > 1"}
-        expected_result = 'from {} where fieldname1 = "value1" select count(*) as agg where agg > 1 select *'.format(self.table)
+        expected_result = f'from {self.table} where fieldname1 = "value1" select count(*) as agg where agg > 1 select *'
+
         self.validate(detection, expected_result)
 
         # Min
         detection = {"selection1": {"fieldname1": "value1"},
                      "condition": "selection1 | min(fieldname2) by fieldname3 > 5"}
-        expected_result = 'from {} where fieldname1 = "value1" group by fieldname3 select min(fieldname2) as agg where agg > 5 select *'.format(self.table)
+        expected_result = f'from {self.table} where fieldname1 = "value1" group by fieldname3 select min(fieldname2) as agg where agg > 5 select *'
+
         self.validate(detection, expected_result)
 
         # Max
         detection = {"selection1": {"fieldname1": "value1"},
                      "condition": "selection1 | max(fieldname2) by fieldname3 > 5"}
-        expected_result = 'from {} where fieldname1 = "value1" group by fieldname3 select max(fieldname2) as agg where agg > 5 select *'.format(self.table)
+        expected_result = f'from {self.table} where fieldname1 = "value1" group by fieldname3 select max(fieldname2) as agg where agg > 5 select *'
+
         self.validate(detection, expected_result)
 
         # Avg
         detection = {"selection1": {"fieldname1": "value1"},
                      "condition": "selection1 | avg(fieldname2) by fieldname3 > 5"}
-        expected_result = 'from {} where fieldname1 = "value1" group by fieldname3 select avg(fieldname2) as agg where agg > 5 select *'.format(self.table)
+        expected_result = f'from {self.table} where fieldname1 = "value1" group by fieldname3 select avg(fieldname2) as agg where agg > 5 select *'
+
         self.validate(detection, expected_result)
 
         # sum
         detection = {"selection1": {"fieldname1": "value1"},
                      "condition": "selection1 | sum(fieldname2) by fieldname3 > 5"}
-        expected_result = 'from {} where fieldname1 = "value1" group by fieldname3 select sum(fieldname2) as agg where agg > 5 select *'.format(self.table)
+        expected_result = f'from {self.table} where fieldname1 = "value1" group by fieldname3 select sum(fieldname2) as agg where agg > 5 select *'
+
         self.validate(detection, expected_result)
 
         # <
         detection = {"selection1": {"fieldname1": "value1"},
                      "condition": "selection1 | sum(fieldname2) by fieldname3 < 5"}
-        expected_result = 'from {} where fieldname1 = "value1" group by fieldname3 select sum(fieldname2) as agg where agg < 5 select *'.format(self.table)
+        expected_result = f'from {self.table} where fieldname1 = "value1" group by fieldname3 select sum(fieldname2) as agg where agg < 5 select *'
+
         self.validate(detection, expected_result)
 
         # ==
         detection = {"selection1": {"fieldname1": "value1"},
                      "condition": "selection1 | sum(fieldname2) by fieldname3 == 5"}
-        expected_result = 'from {} where fieldname1 = "value1" group by fieldname3 select sum(fieldname2) as agg where agg == 5 select *'.format(self.table)
+        expected_result = f'from {self.table} where fieldname1 = "value1" group by fieldname3 select sum(fieldname2) as agg where agg == 5 select *'
+
         self.validate(detection, expected_result)
 
         # Multiple conditions
         detection = {"selection1": {"fieldname1": "value1"},
                      "selection2": {"fieldname2": "*", "fieldname3": "*"},
                      "condition": "selection1 or selection2 | count(fieldname4) by fieldname5 > 3"}
-        expected_result = 'from {} where (fieldname1 = "value1" or (matches(fieldname2, nameglob("*")) and matches(fieldname3, nameglob("*")))) group by fieldname5 select count(fieldname4) as agg where agg > 3 select *'.format(self.table)
+        expected_result = f'from {self.table} where (fieldname1 = "value1" or (matches(fieldname2, nameglob("*")) and matches(fieldname3, nameglob("*")))) group by fieldname5 select count(fieldname4) as agg where agg > 3 select *'
+
         self.validate(detection, expected_result)
 
     def testFullTextSearch(self):
         # Single str FTS
         detection = {"selection1": ["value1"],
                      "condition": "selection1"}
-        expected_result = 'from {} where weaktoktains(raw, "value1", true, true) select *'.format(self.table)
+        expected_result = f'from {self.table} where weaktoktains(raw, "value1", true, true) select *'
+
         self.validate(detection, expected_result)
 
         # OR node FTS
         detection = {"selection1": {"fieldname1": "value1"},
                      "selection2|contains": ["value2", "value3"],
                      "condition": "1 of them"}
-        expected_result = 'from {} where (fieldname1 = "value1" or weaktoktains(raw, "value2", true, true) or weaktoktains(raw, "value3", true, true)) select *'.format(self.table)
+        expected_result = f'from {self.table} where (fieldname1 = "value1" or weaktoktains(raw, "value2", true, true) or weaktoktains(raw, "value3", true, true)) select *'
+
         self.validate(detection, expected_result)
 
     def testRegex(self):
         # Arrange
         detection = {"selection1": {"fieldname1|re": "([0-9]|[1-9][0-9]|[1-4][0-9]{2})"},
                      "condition": "selection1"}
-        expected_result = 'from ' + self.table + ' where matches(fieldname1, re(\"([0-9]|[1-9][0-9]|[1-4][0-9]{2})\")) select *'
+        expected_result = (
+            f'from {self.table}'
+            + ' where matches(fieldname1, re(\"([0-9]|[1-9][0-9]|[1-4][0-9]{2})\")) select *'
+        )
+
 
         # Act & Assert
         self.validate(detection, expected_result)
@@ -199,8 +224,11 @@ class TestDevoBackend(unittest.TestCase):
         # Arrange
         detection = {"selection1": {"select func(fieldname1) as fieldname1": "value1"},
                      "condition": "selection1"}
-        expected_result = 'from ' + self.table + \
-                          ' select func(fieldname1) as fieldname1 where fieldname1 = "value1" select *'
+        expected_result = (
+            f'from {self.table}'
+            + ' select func(fieldname1) as fieldname1 where fieldname1 = "value1" select *'
+        )
+
         # Act & Assert
         self.validate(detection, expected_result)
 
@@ -220,9 +248,9 @@ class TestDevoBackend(unittest.TestCase):
                      "selection2": {"fieldname2": "value2"},
                      "condition": ["selection1", "selection2"]}
         expected_result = 'from siem.logtrust.alert.info select "link" as subquery_link group every 24h by subquery_link' \
-                          ' where subquery_link in ( from ' + self.table + \
-                          ' where fieldname1 = "value1" select "link" as subquery_link) or subquery_link in ( from ' + self.table + \
-                          ' where fieldname2 = "value2" select "link" as subquery_link) select *'
+                              ' where subquery_link in ( from ' + self.table + \
+                              ' where fieldname1 = "value1" select "link" as subquery_link) or subquery_link in ( from ' + self.table + \
+                              ' where fieldname2 = "value2" select "link" as subquery_link) select *'
         # Act & Assert
         self.validate(detection, expected_result)
 
@@ -232,10 +260,10 @@ class TestDevoBackend(unittest.TestCase):
                      "selection2": {"fieldname2": "value2"},
                      "condition": ["selection1 | count(fieldname1) by fieldname2 > 3", "selection2 | count(fieldname3) by fieldname4 > 3"]}
         expected_result = 'from siem.logtrust.alert.info select "link" as subquery_link group every 24h by subquery_link' \
-                          ' where subquery_link in ( from ' + self.table + ' where fieldname1 = "value1" select "link" as' \
-                          ' subquery_link group every - by subquery_link,fieldname2 select count(fieldname1) as agg where agg > 3 select *)' \
-                          ' or subquery_link in ( from ' + self.table + ' where fieldname2 = "value2" select "link" as ' \
-                          'subquery_link group every - by subquery_link,fieldname4 select count(fieldname3) as agg where agg > 3 select *) select *'
+                              ' where subquery_link in ( from ' + self.table + ' where fieldname1 = "value1" select "link" as' \
+                              ' subquery_link group every - by subquery_link,fieldname2 select count(fieldname1) as agg where agg > 3 select *)' \
+                              ' or subquery_link in ( from ' + self.table + ' where fieldname2 = "value2" select "link" as ' \
+                              'subquery_link group every - by subquery_link,fieldname4 select count(fieldname3) as agg where agg > 3 select *) select *'
         # Act & Assert
         self.validate(detection, expected_result)
 

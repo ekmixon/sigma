@@ -28,9 +28,7 @@ mitre_update_urls = dict(
 
 def is_revoked_or_deprecated(obj: dict) -> bool:
     """ Check if the STIX object is revoked or deprecated """
-    if obj.get('revoked') or obj.get('x_mitre_deprecated'):
-        return True
-    return False
+    return bool(obj.get('revoked') or obj.get('x_mitre_deprecated'))
 
 
 def update_tactics(domain: str, mitre_attack: dict, tactics: dict) -> None:
@@ -159,19 +157,14 @@ def format_tactics_output(tactics: dict) -> list:
 
     tactics_formatted = []
     for tactic in tactics.values():
-        for domain in tactic.values():
-            tactics_formatted.append(domain)
-
+        tactics_formatted.extend(iter(tactic.values()))
     tactics_formatted.sort(key=lambda ta: ta['external_id'])
     return tactics_formatted
 
 
 def format_output(sort_field: str, data: dict) -> list:
     """ Format the MITRE ATT&CK data for easier output """
-    data_formatted = []
-    for entry in data.values():
-        data_formatted.append(entry)
-
+    data_formatted = list(data.values())
     data_formatted.sort(key=lambda s: s[sort_field])
     return data_formatted
 

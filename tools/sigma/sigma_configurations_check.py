@@ -29,12 +29,15 @@ def main():
     argparser.add_argument("--error", "-e", action="store_true", help="Exit with error code 10 on verification failures.")
     argparser.add_argument("--output", "-o", default=None, help="Output csv file")
     args = argparser.parse_args()
-    
+
     passed = True
-    
-    list_backend =[]
-    for backend in sorted(backends.getBackendList(), key=lambda backend: backend.identifier):
-        list_backend.append(backend.identifier)
+
+    list_backend = [
+        backend.identifier
+        for backend in sorted(
+            backends.getBackendList(), key=lambda backend: backend.identifier
+        )
+    ]
 
     if args.sumary: 
         print(f"Backend found :\n{list_backend}\n")
@@ -63,7 +66,7 @@ def main():
                     empty += 1
                     #passed = False 
                     #Should not be but not sure
-            
+
         if args.sumary: 
             print('-------')
             print('Summary')
@@ -76,7 +79,7 @@ def main():
                 spamwriter.writerow(['Configurations Name','Backend Name','Result'])
                 for row in csv_lst:
                     spamwriter.writerow(row)
-                
+
         if not passed:
             print("**************************************")
             print("Some Configurations file are not valid")

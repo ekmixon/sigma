@@ -20,10 +20,7 @@ def convert_sigma_level_to_uberagent_risk_score(level):
         "low": 25
     }
 
-    if level in levels:
-        return levels[level]
-
-    return 0
+    return levels.get(level, 0)
 
 
 def convert_sigma_name_to_uberagent_tag(name):
@@ -190,7 +187,7 @@ class ActivityMonitoringRule:
         if self.event_type not in prefixes:
             return self.tag
 
-        return "{}-{}".format(prefixes[self.event_type], self.tag)
+        return f"{prefixes[self.event_type]}-{self.tag}"
 
     def __str__(self):
         """Builds and returns the [ActivityMonitoringRule] configuration block."""
@@ -199,7 +196,7 @@ class ActivityMonitoringRule:
         # The Description is optional.
         if len(self.description) > 0:
             for description_line in self.description.splitlines():
-                result += "# {}\n".format(description_line)
+                result += f"# {description_line}\n"
 
         # Make sure all required properties have at least a value that is somehow usable.
         if self.event_type is None:
@@ -214,16 +211,16 @@ class ActivityMonitoringRule:
         if len(self.query) == 0:
             raise MalformedRuleException()
 
-        result += "RuleName = {}\n".format(self.name)
-        result += "EventType = {}\n".format(self.event_type)
-        result += "Tag = {}\n".format(self._prefixed_tag())
+        result += f"RuleName = {self.name}\n"
+        result += f"EventType = {self.event_type}\n"
+        result += f"Tag = {self._prefixed_tag()}\n"
 
         # The RiskScore is optional.
         # Set it, if a risk_score value is present.
         if self.risk_score > 0:
-            result += "RiskScore = {}\n".format(self.risk_score)
+            result += f"RiskScore = {self.risk_score}\n"
 
-        result += "Query = {}\n".format(self.query)
+        result += f"Query = {self.query}\n"
 
         if self.event_type == "Reg.Any":
             result += "Hive = HKLM,HKU\n"
@@ -236,7 +233,7 @@ class ActivityMonitoringRule:
                     if counter > 10:
                         break
 
-                    result += "GenericProperty{} = {}\n".format(counter, prop)
+                    result += f"GenericProperty{counter} = {prop}\n"
                     counter += 1
 
         return result
@@ -248,18 +245,9 @@ def get_parser_properties(sigmaparser):
     description = sigmaparser.parsedyaml['description']
     condition = sigmaparser.parsedyaml['detection']['condition']
     logsource = sigmaparser.parsedyaml['logsource']
-    category = ''
-    if 'category' in logsource:
-        category = logsource['category'].lower()
-
-    product = ''
-    if 'product' in logsource:
-        product = logsource['product'].lower()
-
-    service = ''
-    if 'service' in logsource:
-        service = logsource['service'].lower()
-
+    category = logsource['category'].lower() if 'category' in logsource else ''
+    product = logsource['product'].lower() if 'product' in logsource else ''
+    service = logsource['service'].lower() if 'service' in logsource else ''
     return product, category, service, title, level, condition, description
 
 
@@ -271,7 +259,7 @@ def write_file_header(f, level):
     f.write("#    2. Using a commandline, change working directory to the just cloned repository\n")
     f.write("#    3. Run sigmac -I --target uberagent -r rules/\n")
     f.write("#\n")
-    f.write("# The rules in this file are marked with sigma-level: {}\n".format(level))
+    f.write(f"# The rules in this file are marked with sigma-level: {level}\n")
     f.write("#\n\n")
 
 
@@ -415,17 +403,21 @@ class uberAgentBackend(SingleTextQueryBackend):
     def fieldNameMapping(self, fieldname, value):
         key = fieldname.lower()
 
-        if self.current_category is not None:
-            if self.current_category in self.fieldMappingPerCategory:
-                if key in self.fieldMappingPerCategory[self.current_category]:
-                    return self.fieldMappingPerCategory[self.current_category][key]
+        if (
+            self.current_category is not None
+            and self.current_category in self.fieldMappingPerCategory
+            and key in self.fieldMappingPerCategory[self.current_category]
+        ):
+            return self.fieldMappingPerCategory[self.current_category][key]
 
         if key not in self.fieldMapping:
             if key in self.ignoreFieldList:
                 raise IgnoreFieldException()
             else:
                 raise NotImplementedError(
-                    'The field name %s in category %s is not implemented.' % (fieldname, self.current_category))
+                    f'The field name {fieldname} in category {self.current_category} is not implemented.'
+                )
+
 
         return self.fieldMapping[key]
 
@@ -462,7 +454,7 @@ class uberAgentBackend(SingleTextQueryBackend):
                 rule.set_sigma_level(level)
                 rule.set_description(description)
                 self.rules.append(rule)
-                print("Generated rule <{}>.. [level: {}]".format(rule.name, level))
+                print(f"Generated rule <{rule.name}>.. [level: {level}]")
         except IgnoreTypedModifierException:
             return ""
         except IgnoreAggregationException:
@@ -478,8 +470,8 @@ class uberAgentBackend(SingleTextQueryBackend):
             write_file_header(file, level)
             for rule in self.rules:
                 try:
-                    serialized_rule = str(rule)
                     if rule.sigma_level == level:
+                        serialized_rule = str(rule)
                         file.write(serialized_rule + "\n")
                         count = count + 1
                 except MalformedRuleException:
@@ -492,12 +484,11 @@ class uberAgentBackend(SingleTextQueryBackend):
         count_high = self.serialize_file("uberAgent-ESA-am-sigma-high.conf", "high")
         count_low = self.serialize_file("uberAgent-ESA-am-sigma-low.conf", "low")
         count_medium = self.serialize_file("uberAgent-ESA-am-sigma-medium.conf", "medium")
-        print("Generated {} activity monitoring rules..".format(len(self.rules)))
+        print(f"Generated {len(self.rules)} activity monitoring rules..")
         print(
-            "This includes {} critical rules, {} high rules, {} medium rules and {} low rules..".format(count_critical,
-                                                                                                        count_high,
-                                                                                                        count_medium,
-                                                                                                        count_low))
+            f"This includes {count_critical} critical rules, {count_high} high rules, {count_medium} medium rules and {count_low} low rules.."
+        )
+
 
         print("There are %d unsupported categories." % len(gUnsupportedCategories))
         for category in gUnsupportedCategories:
@@ -534,7 +525,9 @@ class uberAgentBackend(SingleTextQueryBackend):
         elif has_wildcard:
             return self.mapWildcard % (transformed_fieldname, self.generateNode(value))
         else:
-            raise TypeError("Backend does not support map values of type " + str(type(value)))
+            raise TypeError(
+                f"Backend does not support map values of type {str(type(value))}"
+            )
 
     def cleanValue(self, val):
         if not isinstance(val, str):

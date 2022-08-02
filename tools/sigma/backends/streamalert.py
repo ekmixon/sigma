@@ -85,7 +85,7 @@ class StreamAlertQueryBackend(SingleTextQueryBackend):
             for strMatch in matches:
                 if re.match('\S+ \S', strMatch):
                     strUnescapeMatch = self.unescapeCharacter(strMatch)
-                    val = val.replace(strMatch, '{}'.format(strUnescapeMatch))
+                    val = val.replace(strMatch, f'{strUnescapeMatch}')
         return val.strip()
 
     def cleanValue(self, val):
@@ -103,7 +103,7 @@ class StreamAlertQueryBackend(SingleTextQueryBackend):
             if value[-2:] == '.*':
                 value = value[:-2]
             min_ip = value + '.0' * (4 - sub)
-            new_value = min_ip + '/' + str(8 * (4 - sub))
+            new_value = f'{min_ip}/{str(8 * (4 - sub))}'
         elif isinstance(new_value, list):
             for index, vl in enumerate(new_value):
                 new_value[index] = self.cleanIPRange(vl)
@@ -123,7 +123,7 @@ class StreamAlertQueryBackend(SingleTextQueryBackend):
                 else:
                     new_fieldname += a.upper()
 
-        return new_fieldname if new_fieldname else fieldname
+        return new_fieldname or fieldname
 
     def mapNode(self, key, value):
         if isinstance(value, str):
@@ -134,12 +134,13 @@ class StreamAlertQueryBackend(SingleTextQueryBackend):
             if not value.startswith('*') and value.endswith('*'):
                 return self.startswithExpression % (key, self.cleanValue(value))
 
-        if isinstance(value, SigmaTypeModifier):
-            if isinstance(value, SigmaRegularExpressionModifier):
-                self.import_libs += (
-                    'import re\n' if 'import re\n' not in self.import_libs else ''
-                )
-                return self.regexExpression % (self.generateTypedValueNode(value), key)
+        if isinstance(value, SigmaTypeModifier) and isinstance(
+            value, SigmaRegularExpressionModifier
+        ):
+            self.import_libs += (
+                'import re\n' if 'import re\n' not in self.import_libs else ''
+            )
+            return self.regexExpression % (self.generateTypedValueNode(value), key)
 
         return self.mapExpression % (key, self.cleanValue(value))
 
@@ -157,30 +158,29 @@ class StreamAlertQueryBackend(SingleTextQueryBackend):
         fieldname, value = node
         if fieldname.lower() in self.excluded_fields:
             return
-        else:
-            transformed_fieldname = self.fieldNameMapping(fieldname, value)
-            if any(a in transformed_fieldname for a in ["_IP" or "IP_"]):
-                value = self.cleanIPRange(value)
-            if (
+        transformed_fieldname = self.fieldNameMapping(fieldname, value)
+        if any(a in transformed_fieldname for a in ["_IP" or "IP_"]):
+            value = self.cleanIPRange(value)
+        if (
                 self.mapListsSpecialHandling == False
                 and type(value) in (str, int, list)
             ) or (self.mapListsSpecialHandling == True and type(value) in (str, int)):
-                if isinstance(value, list):
-                    return self.generateNode(
-                        [self.mapNode(transformed_fieldname, a) for a in value]
-                    )
-                elif isinstance(value, str) or isinstance(value, int):
-                    return self.mapNode(transformed_fieldname, value)
-            elif type(value) == list:
-                return self.generateMapItemListNode(transformed_fieldname, value)
-            elif isinstance(value, SigmaTypeModifier):
-                return self.mapNode(transformed_fieldname, value)
-            elif value is None:
-                return self.nullExpression % (transformed_fieldname,)
-            else:
-                raise TypeError(
-                    "Backend does not support map values of type " + str(type(value))
+            if isinstance(value, list):
+                return self.generateNode(
+                    [self.mapNode(transformed_fieldname, a) for a in value]
                 )
+            elif isinstance(value, (str, int)):
+                return self.mapNode(transformed_fieldname, value)
+        elif type(value) == list:
+            return self.generateMapItemListNode(transformed_fieldname, value)
+        elif isinstance(value, SigmaTypeModifier):
+            return self.mapNode(transformed_fieldname, value)
+        elif value is None:
+            return self.nullExpression % (transformed_fieldname,)
+        else:
+            raise TypeError(
+                f"Backend does not support map values of type {str(type(value))}"
+            )
 
     def generate(self, sigmaparser: SigmaParser):
         """Method is called for each sigma rule and receives the parsed rule (SigmaParser)"""
@@ -198,28 +198,25 @@ class StreamAlertQueryBackend(SingleTextQueryBackend):
             ]
             service = sigmaparser.parsedyaml['logsource'].get('service', '{service}')
             logsource = ' - '.join(
-                '{}:{}'.format(k, v)
-                for k, v in sigmaparser.parsedyaml['logsource'].items()
-            )
-            self.is_upper = 'upper' in sigmaparser.config.config.get("tags", [])
-            outputs = sigmaparser.config.config.get("outputs", [])
-            publishers = '[{}]'.format(
-                ', '.join(sigmaparser.config.config.get("publishers", []))
+                f'{k}:{v}' for k, v in sigmaparser.parsedyaml['logsource'].items()
             )
 
-            self.import_libs = ''
-            for publisher in sigmaparser.config.config.get("publishers", []):
-                self.import_libs += 'from publishers.general.{0} import {0}\n'.format(
-                    publisher
-                )
+            self.is_upper = 'upper' in sigmaparser.config.config.get("tags", [])
+            outputs = sigmaparser.config.config.get("outputs", [])
+            publishers = f"""[{', '.join(sigmaparser.config.config.get("publishers", []))}]"""
+
+
+            self.import_libs = ''.join(
+                'from publishers.general.{0} import {0}\n'.format(publisher)
+                for publisher in sigmaparser.config.config.get("publishers", [])
+            )
+
         except KeyError:
             logsource = '{logsource}'
             service = '{service}'
 
         results = ''
-        for parsed in sigmaparser.condparsed:
-            query = self.generateQuery(parsed)
-            result = '''{import_libs}
+        result = '''{import_libs}
 from streamalert.shared.rule import rule
 
 """
@@ -238,6 +235,8 @@ def {function_name}(record):
     return {query}
 '''
 
+        for parsed in sigmaparser.condparsed:
+            query = self.generateQuery(parsed)
             if query is not None:
                 results += result.format(
                     import_libs=self.import_libs,

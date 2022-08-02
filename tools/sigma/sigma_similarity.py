@@ -48,13 +48,13 @@ class SigmaNormalizationBackend(SingleTextQueryBackend):
 
     def generateTypedValueNode(self, node):
         """Return normalized form of typed values"""
-        return "type_{}({})".format(node.identifier, str(node))
+        return f"type_{node.identifier}({str(node)})"
 
     def generateAggregation(self, agg):
         if agg.aggfunc_notrans == "near":
-            return " near in={} ex={}".format(str(agg.include), str(agg.exclude))
+            return f" near in={str(agg.include)} ex={str(agg.exclude)}"
         else:
-            return " | {}({}) by {} {} {}".format(agg.aggfunc_notrans, agg.aggfield, agg.groupfield, agg.cond_op, agg.condition)
+            return f" | {agg.aggfunc_notrans}({agg.aggfield}) by {agg.groupfield} {agg.cond_op} {agg.condition}"
 
 def main():
     backend = SigmaNormalizationBackend(SigmaConfiguration())
@@ -72,7 +72,6 @@ def main():
                 str(path): SigmaCollectionParser(path.open(encoding='utf-8').read())
                 for path in paths
             }
-               
  #   converted = {
  #               str(path): list(sigma_collection.generate(backend))
  #               for path, sigma_collection in parsed.items()
@@ -85,7 +84,7 @@ def main():
             converted[key] = value
         except :
             continue #when Raise NotImplementedError: Base backend doesn't support multiple conditions
-            
+
     converted_flat = (
                 (path, i, normalized)
                 for path, nlist in converted.items()

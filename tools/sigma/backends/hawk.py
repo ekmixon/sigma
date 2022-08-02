@@ -53,7 +53,7 @@ class HAWKBackend(SingleTextQueryBackend):
     aql_database = "events"
 
     def cleanKey(self, key):
-        if key == None:
+        if key is None:
             return ""
         return self.snake_case( self.sigmaparser.config.get_fieldmapping(key).resolve_fieldname(key, self.sigmaparser) )
 
@@ -86,18 +86,23 @@ class HAWKBackend(SingleTextQueryBackend):
             #print("TUPLE: ", node)
             return self.generateMapItemNode(node, notNode)
         elif type(node) in (str, int):
-            nodeRet = {"key": "",  "description": "", "class": "column", "return": "str", "args": { "comparison": { "value": "=" }, "str": { "value": "5", "regex": "true" } } }
             #key = next(iter(self.sigmaparser.parsedyaml['detection'])) 
             key = "payload"
 
-            #nodeRet['key'] = self.cleanKey(key).lower()
-            nodeRet['key'] = key
+            nodeRet = {
+                "key": "",
+                "description": "",
+                "class": "column",
+                "return": "str",
+                "args": {
+                    "comparison": {"value": "="},
+                    "str": {"value": "5", "regex": "true"},
+                },
+                'key': key,
+                'description': key,
+                'rule_id': str(uuid.uuid4()),
+            }
 
-            #print(node)
-            #print("KEY: ", key)
-            # they imply the entire payload
-            nodeRet['description'] = key
-            nodeRet['rule_id'] = str(uuid.uuid4())
             value = self.generateValueNode(node, False).replace("*", "EEEESTAREEE")
             if value[-2:] == "\\\\":
                 value = value[:-2]
@@ -105,7 +110,7 @@ class HAWKBackend(SingleTextQueryBackend):
             value = value.replace("EEEESTAREEE", ".*")
             endsWith = False
             startsWith = False
-            if value[0:2] == ".*":  
+            if value[:2] == ".*":  
                 value = value[2:]
                 endsWith = True
             if value[-2:] == ".*":
@@ -113,15 +118,15 @@ class HAWKBackend(SingleTextQueryBackend):
                 startsWith = True
 
             if endsWith and not startsWith:
-                nodeRet['args']['str']['value'] = value + "$"
+                nodeRet['args']['str']['value'] = f"{value}$"
             elif startsWith and not endsWith:
-                nodeRet['args']['str']['value'] = "^" + value
+                nodeRet['args']['str']['value'] = f"^{value}"
             else:
 
                 # custom, since we trim up  string size in log to save bytes
                 if key == 'Provider_Name':
                     nodeRet['key'] = "product_name"
-                    if type(value) is str and value[0:17] == 'Microsoft-Windows':
+                    if type(value) is str and value[:17] == 'Microsoft-Windows':
                         value = value[18:]
 
                 nodeRet['args']['str']['value'] = value
@@ -133,17 +138,16 @@ class HAWKBackend(SingleTextQueryBackend):
         elif type(node) == list:
             return self.generateListNode(node, notNode)
         else:
-            raise TypeError("Node type %s was not expected in Sigma parse tree" % (str(type(node))))
+            raise TypeError(
+                f"Node type {str(type(node))} was not expected in Sigma parse tree"
+            )
 
     def generateANDNode(self, node, notNode=False):
-        ret = { "id" : "and", "key": "And", "children" : [ ] }
         generated = [ self.generateNode(val, notNode) for val in node ]
-        filtered = [ g for g in generated if g is not None ]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             if self.sort_condition_lists:
                 filtered = sorted(filtered)
-            ret['children'] = filtered
-            return ret
+            return {"id": "and", "key": "And", "children": [], 'children': filtered}
         else:
             return None
 
@@ -153,8 +157,7 @@ class HAWKBackend(SingleTextQueryBackend):
         else:
             ret = { "id" : "or", "key": "Or", "children" : [ ] }
         generated = [ self.generateNode(val, notNode) for val in node ]
-        filtered = [ g for g in generated if g is not None ]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             if self.sort_condition_lists:
                 filtered = sorted(filtered)
             ret['children'] = filtered
@@ -165,17 +168,16 @@ class HAWKBackend(SingleTextQueryBackend):
 
     def generateSubexpressionNode(self, node, notNode=False):
         generated = self.generateNode(node.items, notNode)
-        if 'len'in dir(node.items): # fix the "TypeError: object of type 'NodeSubexpression' has no len()"
-            if len(node.items) == 1:
-                # A sub expression with length 1 is not a proper sub expression, no self.subExpression required
-                return generated
+        if 'len' in dir(node.items) and len(node.items) == 1:
+            # A sub expression with length 1 is not a proper sub expression, no self.subExpression required
+            return generated
         if generated:
             return json.loads(self.subExpression % json.dumps(generated))
         else:
             return None
 
     def generateListNode(self, node, notNode=False):
-        if not set([type(value) for value in node]).issubset({str, int}):
+        if not {type(value) for value in node}.issubset({str, int}):
             raise TypeError("List values must be strings or numbers")
         result = [self.generateNode(value, notNode) for value in node]
         if len(result) == 1:
@@ -184,8 +186,7 @@ class HAWKBackend(SingleTextQueryBackend):
         return self.listExpression % (self.listSeparator.join(result))
 
     def generateNOTNode(self, node):
-        generated = self.generateNode(node.item, True)
-        return generated
+        return self.generateNode(node.item, True)
 
     def generateMapItemNode(self, node, notNode=False):
         nodeRet = {"key": "",  "description": "", "class": "column", "return": "str", "args": { "comparison": { "value": "=" }, "str": { "value": 5 } } }
@@ -200,7 +201,7 @@ class HAWKBackend(SingleTextQueryBackend):
                 self.logname = value
             if type(value) == str and "*" in value:
 
-                if (nodeRet['key'] == 'correlation_username' or nodeRet['key'] == 'target_username'):
+                if nodeRet['key'] in ['correlation_username', 'target_username']:
                     if 'NT AUTHORITY\\SYS' in value.upper():
                         value = value.replace('NT AUTHORITY\\SYSTEM', 'SYSTEM')
                     elif 'AUTHORI' in value.upper():
@@ -211,7 +212,7 @@ class HAWKBackend(SingleTextQueryBackend):
                 value = value.replace("EEEESTAREEE", ".*")
                 endsWith = False
                 startsWith = False
-                if value[0:2] == ".*":  
+                if value[:2] == ".*":  
                     value = value[2:]
                     endsWith = True
                 if value[-2:] == ".*":
@@ -225,16 +226,13 @@ class HAWKBackend(SingleTextQueryBackend):
                     value = value[:-2]
 
                 if endsWith and not startsWith:
-                    nodeRet['args']['str']['value'] = value + "$"
+                    nodeRet['args']['str']['value'] = f"{value}$"
                 elif startsWith and not endsWith:
-                    nodeRet['args']['str']['value'] = "^" + value
+                    nodeRet['args']['str']['value'] = f"^{value}"
                 else:
                     nodeRet['args']['str']['value'] = value
 
                 nodeRet['args']['str']['regex'] = "true"
-                # return "%s regex %s" % (self.cleanKey(key), self.generateValueNode(value, True))
-                #return json.dumps(nodeRet)
-                return nodeRet
             elif type(value) is str:
                 if notNode:
                     nodeRet["args"]["comparison"]["value"] = "!="
@@ -244,18 +242,16 @@ class HAWKBackend(SingleTextQueryBackend):
                 # custom, since we trim up  string size in log to save bytes
                 if key == 'Provider_Name':
                     nodeRet['key'] = "product_name"
-                    if value[0:17] == 'Microsoft-Windows':
+                    if value[:17] == 'Microsoft-Windows':
                         value = value[18:]
 
-                if (nodeRet['key'] == 'correlation_username' or nodeRet['key'] == 'target_username'): 
+                if nodeRet['key'] in ['correlation_username', 'target_username']: 
                     if 'NT AUTHORITY\\SYS' in value.upper():
                         value = value.replace('NT AUTHORITY\\SYSTEM', 'SYSTEM')
                     elif 'AUTHORI' in value.upper():
                         value = 'SYSTEM'
 
                 nodeRet['args']['str']['value'] = value
-                # return json.dumps(nodeRet)
-                return nodeRet
             elif type(value) is int:
                 nodeRet['return'] = "int"
                 nodeRet['args']['int'] = { "value" : value }
@@ -263,13 +259,10 @@ class HAWKBackend(SingleTextQueryBackend):
                     nodeRet["args"]["comparison"]["value"] = "!="
                 else:
                     nodeRet['args']['comparison']['value'] = "="
-                del nodeRet['args']['str'] 
-                #return self.mapExpression % (self.cleanKey(key), self.generateValueNode(value, True))
-                #return json.dumps(nodeRet)
-                return nodeRet
+                del nodeRet['args']['str']
             else:
 
-                if nodeRet['key'] == 'correlation_username' or nodeRet['key'] == 'target_username':
+                if nodeRet['key'] in ['correlation_username', 'target_username']:
                     if 'NT AUTHORITY\\SYS' in value.upper():
                         value = value.replace('NT AUTHORITY\\SYSTEM', 'SYSTEM')
                     elif 'AUTHORI' in value.upper():
@@ -280,8 +273,9 @@ class HAWKBackend(SingleTextQueryBackend):
                     nodeRet["args"]["comparison"]["value"] = "!="
                 else:
                     nodeRet['args']['comparison']['value'] = "="
-                #return json.dumps(nodeRet)
-                return nodeRet
+            # return "%s regex %s" % (self.cleanKey(key), self.generateValueNode(value, True))
+            #return json.dumps(nodeRet)
+            return nodeRet
         elif type(value) == list:
             return self.generateMapItemListNode(key, value, notNode)
         elif isinstance(value, SigmaTypeModifier):
@@ -293,16 +287,15 @@ class HAWKBackend(SingleTextQueryBackend):
             #print(key)
             nodeRet = { "key" : "empty", "description" : "Value Does Not Exist (IS NULL)", "class" : "function", "inputs" : { "comparison" : { "order" : 0, "source" : "comparison", "type" : "comparison" }, "column" : { "order" : 1, "source" : "columns", "type" : "str" } }, "args" : { "comparison" : { "value" : "!=" }, "column" : { "value" : "" } }, "return" : "boolean" }
             nodeRet['args']['column']['value'] = self.cleanKey(key).lower()
-            nodeRet['description'] += " %s" % key
-            if notNode:
-                nodeRet['args']['comparison']['value'] = "!="
-            else:
-                nodeRet['args']['comparison']['value'] = "="
+            nodeRet['description'] += f" {key}"
+            nodeRet['args']['comparison']['value'] = "!=" if notNode else "="
             #return json.dumps(nodeRet)
             #print(json.dumps(nodeRet))
             return nodeRet
         else:
-            raise TypeError("Backend does not support map values of type " + str(type(value)))
+            raise TypeError(
+                f"Backend does not support map values of type {str(type(value))}"
+            )
 
     def generateMapItemListNode(self, key, value, notNode=False):
         if notNode:
@@ -310,19 +303,22 @@ class HAWKBackend(SingleTextQueryBackend):
         else:
             ret = { "id" : "or", "key": "Or", "children" : [ ] }
         for item in value:
-            nodeRet = {"key": "",  "description": "", "class": "column", "return": "str", "args": { "comparison": { "value": "=" }, "str": { "value": "5" } } }
-            nodeRet['key'] = self.cleanKey(key).lower()
+            nodeRet = {
+                "key": "",
+                "description": "",
+                "class": "column",
+                "return": "str",
+                "args": {"comparison": {"value": "="}, "str": {"value": "5"}},
+                'key': self.cleanKey(key).lower(),
+            }
+
             nodeRet['description'] = key
             nodeRet['rule_id'] = str(uuid.uuid4())
-            if notNode:
-                nodeRet['args']['comparison']['value'] = "!="
-            else:
-                nodeRet['args']['comparison']['value'] = "="
+            nodeRet['args']['comparison']['value'] = "!=" if notNode else "="
             if item is None:
                 nodeRet['args']['str']['value'] = 'null'
-                ret['children'].append( nodeRet )
             elif type(item) == str and "*" in item:
-                if (nodeRet['key'] == 'correlation_username' or nodeRet['key'] == 'target_username'):
+                if nodeRet['key'] in ['correlation_username', 'target_username']:
                     if 'NT AUTHORITY\\SYS' in item.upper():
                         item = item.replace('NT AUTHORITY\\SYSTEM', 'SYSTEM')
                     elif 'AUTHORI' in item.upper():
@@ -343,9 +339,9 @@ class HAWKBackend(SingleTextQueryBackend):
 
 
                 if endsWith and not startsWith:
-                    nodeRet['args']['str']['value'] = item + "$"
+                    nodeRet['args']['str']['value'] = f"{item}$"
                 elif startsWith and not endsWith:
-                    nodeRet['args']['str']['value'] = "^" + item
+                    nodeRet['args']['str']['value'] = f"^{item}"
                 else:
                     nodeRet['args']['str']['value'] = item
                 nodeRet['args']['str']['regex'] = "true"
@@ -354,8 +350,6 @@ class HAWKBackend(SingleTextQueryBackend):
                     nodeRet["args"]["comparison"]["value"] = "!="
                 else:
                     nodeRet['args']['comparison']['value'] = "="
-                #print(item)
-                ret['children'].append( nodeRet )
             else:
                 nodeRet['args']['str']['value'] = self.generateValueNode(item, True)
 
@@ -363,7 +357,7 @@ class HAWKBackend(SingleTextQueryBackend):
                 key = nodeRet['key']
                 value = nodeRet['args']['str']['value']
 
-                if (nodeRet['key'] == 'correlation_username' or nodeRet['key'] == 'target_username'):
+                if nodeRet['key'] in ['correlation_username', 'target_username']:
                     if 'NT AUTHORITY\\SYS' in value.upper():
                         value = value.replace('NT AUTHORITY\\SYSTEM', 'SYSTEM')
                     elif 'AUTHORI' in value.upper():
@@ -371,39 +365,47 @@ class HAWKBackend(SingleTextQueryBackend):
 
                 if key == 'provider__name':
                     nodeRet['key'] = "product_name"
-                    if value[0:17] == 'Microsoft-Windows':
+                    if value[:17] == 'Microsoft-Windows':
                         value = value[18:]
 
                 nodeRet['args']['str']['value'] = value
 
-                ret['children'].append( nodeRet )
-        retAnd = { "id" : "and", "key": "And", "children" : [ ret ] }
-        return retAnd # '('+" or ".join(itemslist)+')'
+            ret['children'].append( nodeRet )
+        return { "id" : "and", "key": "And", "children" : [ ret ] }
         # return json.dumps(ret) # '('+" or ".join(itemslist)+')'
 
     def generateMapItemTypedNode(self, fieldname, value, notNode=False):
-        nodeRet = {"key": "",  "description": "", "class": "column", "return": "str", "args": { "comparison": { "value": "=" }, "str": { "value": "5" } } }
-        nodeRet['key'] = self.cleanKey(fieldname).lower()
+        nodeRet = {
+            "key": "",
+            "description": "",
+            "class": "column",
+            "return": "str",
+            "args": {"comparison": {"value": "="}, "str": {"value": "5"}},
+            'key': self.cleanKey(fieldname).lower(),
+        }
+
         nodeRet['description'] = fieldname
         nodeRet['rule_id'] = str(uuid.uuid4())
-        if type(value) == SigmaRegularExpressionModifier:
-            value = self.generateValueNode(value, True)
+        if type(value) != SigmaRegularExpressionModifier:
+            raise NotImplementedError(
+                f"Type modifier '{value.identifier}' is not supported by backend"
+            )
 
-            if (nodeRet['key'] == 'correlation_username' or nodeRet['key'] == 'target_username'):
-                if 'NT AUTHORITY\\SYS' in value.upper():
-                    value = value.replace('NT AUTHORITY\\SYSTEM', 'SYSTEM')
-                elif 'AUTHORI' in value.upper():
-                    value = 'SYSTEM'
+        value = self.generateValueNode(value, True)
 
-            nodeRet['args']['str']['value'] = value
-            nodeRet['args']['str']['regex'] = "true"
-            if notNode:
-                nodeRet["args"]["comparison"]["value"] = "!="
-            else:
-                nodeRet['args']['comparison']['value'] = "="
-            return nodeRet
+        if nodeRet['key'] in ['correlation_username', 'target_username']:
+            if 'NT AUTHORITY\\SYS' in value.upper():
+                value = value.replace('NT AUTHORITY\\SYSTEM', 'SYSTEM')
+            elif 'AUTHORI' in value.upper():
+                value = 'SYSTEM'
+
+        nodeRet['args']['str']['value'] = value
+        nodeRet['args']['str']['regex'] = "true"
+        if notNode:
+            nodeRet["args"]["comparison"]["value"] = "!="
         else:
-            raise NotImplementedError("Type modifier '{}' is not supported by backend".format(value.identifier))
+            nodeRet['args']['comparison']['value'] = "="
+        return nodeRet
 
     def generateValueNode(self, node, keypresent):
         return self.valueExpression % (self.cleanValue(str(node)))
@@ -412,11 +414,8 @@ class HAWKBackend(SingleTextQueryBackend):
         # node.item
         nodeRet = { "key" : "empty", "description" : "Value Does Not Exist (IS NULL)", "class" : "function", "inputs" : { "comparison" : { "order" : 0, "source" : "comparison", "type" : "comparison" }, "column" : { "order" : 1, "source" : "columns", "type" : "str" } }, "args" : { "comparison" : { "value" : "!=" }, "column" : { "value" : node.item } }, "return" : "boolean" }
         nodeRet['args']['column']['value'] = self.cleanKey(node.item).lower()
-        nodeRet['description'] += " %s" % key
-        if notNode:
-            nodeRet['args']['comparison']['value'] = "!="
-        else:
-            nodeRet['args']['comparison']['value'] = "="
+        nodeRet['description'] += f" {key}"
+        nodeRet['args']['comparison']['value'] = "!=" if notNode else "="
         nodeRet['rule_id'] = str(uuid.uuid4())
         # return json.dumps(nodeRet)
         return nodeRet
@@ -426,39 +425,67 @@ class HAWKBackend(SingleTextQueryBackend):
         return node.item
 
     def generateAggregation(self, agg, timeframe='00'):
-        if agg == None:
+        if agg is None:
             return None
         #print(agg.aggfunc)
         #print(type(agg.aggfunc))
         #print(agg.aggfunc_notrans)
-        if not agg.aggfunc_notrans.lower() in ("count", "sum"):
+        if agg.aggfunc_notrans.lower() not in ("count", "sum"):
             raise NotImplementedError("This aggregation operator '%s' has not been implemented" % agg.aggfunc_notrans)
 
         if agg.aggfunc == sigma.parser.condition.SigmaAggregationParser.AGGFUNC_NEAR:
             return None
 
-        if agg.groupfield == None:
+        if agg.groupfield is None:
             agg.groupfield = "priority"
 
         if agg.groupfield != None and timeframe == '00':
-            self.prefixAgg = " SELECT %s(%s) as agg_val from %s where " % (agg.aggfunc_notrans, self.cleanKey(agg.aggfield), self.aql_database)
-            self.suffixAgg = " group by %s having agg_val %s %s" % (self.cleanKey(agg.groupfield), agg.cond_op, agg.condition)
+            self.prefixAgg = f" SELECT {agg.aggfunc_notrans}({self.cleanKey(agg.aggfield)}) as agg_val from {self.aql_database} where "
+
+            self.suffixAgg = f" group by {self.cleanKey(agg.groupfield)} having agg_val {agg.cond_op} {agg.condition}"
+
             #print("Group field and timeframe is 00")
             min_count = 60
-            nodeRet = {"key": "atomic_counter",  "description": self.cleanKey(agg.groupfield) + " %s aggregation stream counter" % agg.aggfunc_notrans, "class": "function", "return": "int",
-                 "inputs": {
-                     "columns" : { "order" : "0", "source" : "columns", "type" : "array", "objectKey" : "columns" },
-                     "comparison" : { "order" : "1", "source" : "comparison", "type" : "comparison", "objectKey" : "comparison" },
-                     "threshold" : { "order" : "2", "source" : "", "type" : "int", "objectKey" : "threshold" },
-                     "limit" : { "order" : "3", "source" : "time_offset", "type" : "int", "objectKey" : "limit" },
-                 },
-                 "args": { 
-                     "columns" : [ "ip_src", self.cleanKey(agg.groupfield) ],
-                     "comparison": { "value": "%s" % agg.cond_op }, 
-                     "threshold": { "value": int(agg.condition) }, 
-                     "limit": { "value": min_count } 
-                 } 
+            nodeRet = {
+                "key": "atomic_counter",
+                "description": self.cleanKey(agg.groupfield)
+                + f" {agg.aggfunc_notrans} aggregation stream counter",
+                "class": "function",
+                "return": "int",
+                "inputs": {
+                    "columns": {
+                        "order": "0",
+                        "source": "columns",
+                        "type": "array",
+                        "objectKey": "columns",
+                    },
+                    "comparison": {
+                        "order": "1",
+                        "source": "comparison",
+                        "type": "comparison",
+                        "objectKey": "comparison",
+                    },
+                    "threshold": {
+                        "order": "2",
+                        "source": "",
+                        "type": "int",
+                        "objectKey": "threshold",
+                    },
+                    "limit": {
+                        "order": "3",
+                        "source": "time_offset",
+                        "type": "int",
+                        "objectKey": "limit",
+                    },
+                },
+                "args": {
+                    "columns": ["ip_src", self.cleanKey(agg.groupfield)],
+                    "comparison": {"value": f"{agg.cond_op}"},
+                    "threshold": {"value": int(agg.condition)},
+                    "limit": {"value": min_count},
+                },
             }
+
             nodeRet['rule_id'] = str(uuid.uuid4())
             #print("No time range set")
             return nodeRet
@@ -467,20 +494,46 @@ class HAWKBackend(SingleTextQueryBackend):
                 min_count = 60
                 if key.lower() == 'hours':
                     min_count = 24 * int(duration)
-                nodeRet = {"key": "atomic_counter",  "description": self.cleanKey(agg.groupfield) + " %s aggregation stream counter" % agg.aggfunc_notrans, "class": "function", "return": "int",
-                         "inputs": {
-                             "columns" : { "order" : "0", "source" : "columns", "type" : "array", "objectKey" : "columns" },
-                             "comparison" : { "order" : "1", "source" : "comparison", "type" : "comparison", "objectKey" : "comparison" },
-                             "threshold" : { "order" : "2", "source" : "", "type" : "int", "objectKey" : "threshold" },
-                             "limit" : { "order" : "3", "source" : "time_offset", "type" : "int", "objectKey" : "limit" },
-                         },
-                         "args": { 
-                             "columns" : [ "ip_src", self.cleanKey(agg.groupfield) ],
-                             "comparison": { "value": "%s" % agg.cond_op }, 
-                             "threshold": { "value": int(agg.condition) }, 
-                             "limit": { "value": min_count } 
-                         } 
-                    }
+                nodeRet = {
+                    "key": "atomic_counter",
+                    "description": self.cleanKey(agg.groupfield)
+                    + f" {agg.aggfunc_notrans} aggregation stream counter",
+                    "class": "function",
+                    "return": "int",
+                    "inputs": {
+                        "columns": {
+                            "order": "0",
+                            "source": "columns",
+                            "type": "array",
+                            "objectKey": "columns",
+                        },
+                        "comparison": {
+                            "order": "1",
+                            "source": "comparison",
+                            "type": "comparison",
+                            "objectKey": "comparison",
+                        },
+                        "threshold": {
+                            "order": "2",
+                            "source": "",
+                            "type": "int",
+                            "objectKey": "threshold",
+                        },
+                        "limit": {
+                            "order": "3",
+                            "source": "time_offset",
+                            "type": "int",
+                            "objectKey": "limit",
+                        },
+                    },
+                    "args": {
+                        "columns": ["ip_src", self.cleanKey(agg.groupfield)],
+                        "comparison": {"value": f"{agg.cond_op}"},
+                        "threshold": {"value": int(agg.condition)},
+                        "limit": {"value": min_count},
+                    },
+                }
+
                 nodeRet['rule_id'] = str(uuid.uuid4())
                 #self.prefixAgg = " SELECT %s(%s) as agg_val from %s where " % (agg.aggfunc_notrans, self.cleanKey(agg.aggfield), self.aql_database)
                 #self.suffixAgg = " group by %s having agg_val %s %s LAST %s %s" % (self.cleanKey(agg.groupfield), agg.cond_op, agg.condition, duration, key)
@@ -488,11 +541,12 @@ class HAWKBackend(SingleTextQueryBackend):
                 #return self.prefixAgg, self.suffixAgg
                 return nodeRet
         else:
-            self.prefixAgg = " SELECT %s(%s) as agg_val from %s where " % (agg.aggfunc_notrans, self.cleanKey(agg.aggfield), self.aql_database)
-            self.suffixAgg = " group by %s having agg_val %s %s" % (self.cleanKey(agg.groupfield), agg.cond_op, agg.condition)
+            self.prefixAgg = f" SELECT {agg.aggfunc_notrans}({self.cleanKey(agg.aggfield)}) as agg_val from {self.aql_database} where "
+
+            self.suffixAgg = f" group by {self.cleanKey(agg.groupfield)} having agg_val {agg.cond_op} {agg.condition}"
+
             #print("Last option")
-            raise NotImplementedError("The 'agg' aggregation operator is not yet implemented for this backend") 
-            return self.prefixAgg, self.suffixAgg
+            raise NotImplementedError("The 'agg' aggregation operator is not yet implemented for this backend")
         #print(agg)
         raise NotImplementedError("The 'agg' aggregation operator is not yet implemented for this backend") 
 
@@ -513,16 +567,17 @@ class HAWKBackend(SingleTextQueryBackend):
         return timeframe_object
 
     def generateBefore(self, parsed):
-        if self.logname:
-            return self.logname
         return self.logname
 
     def generate(self, sigmaparser):
         """Method is called for each sigma rule and receives the parsed rule (SigmaParser)"""
-        columns = list()
+        columns = []
         mapped =None
         #print(sigmaparser.parsedyaml)
-        self.logsource = sigmaparser.parsedyaml.get("logsource") if sigmaparser.parsedyaml.get("logsource") else sigmaparser.parsedyaml.get("logsources", {})
+        self.logsource = sigmaparser.parsedyaml.get(
+            "logsource"
+        ) or sigmaparser.parsedyaml.get("logsources", {})
+
         fields = ""
         try:
             #print(sigmaparser.parsedyaml["fields"])
@@ -536,12 +591,10 @@ class HAWKBackend(SingleTextQueryBackend):
                     raise TypeError("Field mapping must return string or list")
 
             fields = ",".join(str(x) for x in columns)
-            fields = " | table " + fields
+            fields = f" | table {fields}"
 
         except KeyError:    # no 'fields' attribute
             mapped = None
-            pass
-
         #print("Mapped: ", mapped)
         #print(sigmaparser.parsedyaml)
         #print(sigmaparser.condparsed)
@@ -570,7 +623,7 @@ class HAWKBackend(SingleTextQueryBackend):
 
     def dedupeAnds(self, arr, parentAnd=False):
         # simple dedupe
-        for i in range(0, len(arr)):
+        for i in range(len(arr)):
             if 'id' in arr[i] and arr[i]['id'].lower() == "and":
                 arr[i]['children'] = self.dedupeAnds(arr[i]['children'])
 
@@ -578,29 +631,6 @@ class HAWKBackend(SingleTextQueryBackend):
                     arr[i] = arr[i]['children'][0]
 
 
-        return arr
-
-        """
-        for i in range(0, len(arr)):
-            if parentAnd and 'id' in arr[i] and arr[i]['id'].lower() == "and":
-                isAnd = True
-            else:
-                isAnd = False
-            
-            if 'children' in arr[i]:
-                arr[i]['children'] = self.dedupeAnds(arr['i']['children'], isAnd)
-
-            if parentAnd and 'id' in arr[i] and arr[i]['id'].lower() == "and":
-                pass
-
-        if len(arr) == 1 and 'id' in arr[0] and arr[0]['id'].lower() == "and":
-            # print("Returning less!")
-            for i in range(0, len(arr) ):
-                if 'id' in arr[i] and arr[i]['id'].lower() == "and":
-                    arr[i]['children'] = self.dedupeAnds(arr[i]['children'])
-            return arr[0]['children']
-
-        """
         return arr
 
     """

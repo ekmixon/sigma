@@ -52,14 +52,15 @@ class OutliersBackend(ElasticsearchDSLBackend, MultiRuleOutputMixin):
             "es_dsl_filter": dsl,
             "es_index": index,
             "outlier_type": ", ".join(types),
-            "outlier_reason": "Sigma hit - " + self.title,
-            "outlier_summary": "Sigma hit - " + self.title,
+            "outlier_reason": f"Sigma hit - {self.title}",
+            "outlier_summary": f"Sigma hit - {self.title}",
             "run_model": 1,
-            "test_model": 0
+            "test_model": 0,
         }
 
+
         config = configparser.ConfigParser(interpolation=None)
-        config["simplequery_sigma_" + use_case_name] = config_data
+        config[f"simplequery_sigma_{use_case_name}"] = config_data
 
         output = StringIO()
         config.write(output)

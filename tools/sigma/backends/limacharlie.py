@@ -24,14 +24,14 @@ from sigma.parser.modifiers.type import SigmaRegularExpressionModifier
 # A few helper functions for cases where field mapping cannot be done
 # as easily one by one, or can be done more efficiently.
 def _windowsEventLogArtifactFieldName(fieldName):
-    if 'EventID' == fieldName:
+    if fieldName == 'EventID':
         return 'Event/System/EventID'
-    return 'Event/EventData/%s' % (fieldName,)
+    return f'Event/EventData/{fieldName}'
 
 def _windowsEventLogEDRFieldName(fieldName):
-    if 'EventID' == fieldName:
+    if fieldName == 'EventID':
         return 'event/EVENT/System/EventID'
-    return 'event/EVENT/EventData/%s' % (fieldName,)
+    return f'event/EVENT/EventData/{fieldName}'
 
 def _mapProcessCreationOperations(node):
     # Here we fix some common pitfalls found in rules
@@ -41,9 +41,11 @@ def _mapProcessCreationOperations(node):
     # based on a specific drive letter. There are many cases
     # where the driver letter can change or where the early
     # boot process refers to it as "\Device\HarddiskVolume1\".
-    if ("starts with" == node["op"] and
-        "event/FILE_PATH" == node["path"] and
-        node["value"].lower().startswith("c:\\")):
+    if (
+        node["op"] == "starts with"
+        and node["path"] == "event/FILE_PATH"
+        and node["value"].lower().startswith("c:\\")
+    ):
         node["op"] = "matches"
         node["re"] = "^(?:(?:.:)|(?:\\\\Device\\\\HarddiskVolume.))\\\\%s" % (re.escape(node["value"][3:]),)
         del(node["value"])
@@ -324,10 +326,24 @@ class LimaCharlieBackend(BaseBackend):
         service = ""
 
         # See if we have a definition for the source combination.
-        mappingKey = "%s/%s/%s" % (product, category, service)
-        topFilter, preCond, mappings, isAllStringValues, keywordField, postOpMapper, isCaseSensitive = _allFieldMappings.get(self.lc_target, {}).get(mappingKey, tuple([None, None, None, None, None, None, None]))
+        mappingKey = f"{product}/{category}/{service}"
+        (
+            topFilter,
+            preCond,
+            mappings,
+            isAllStringValues,
+            keywordField,
+            postOpMapper,
+            isCaseSensitive,
+        ) = _allFieldMappings.get(self.lc_target, {}).get(
+            mappingKey, (None, None, None, None, None, None, None)
+        )
+
         if mappings is None:
-            raise NotImplementedError("Log source %s/%s/%s not supported by backend." % (product, category, service))
+            raise NotImplementedError(
+                f"Log source {product}/{category}/{service} not supported by backend."
+            )
+
 
         # Field name conversions.
         self._fieldMappingInEffect = mappings
@@ -430,7 +446,7 @@ class LimaCharlieBackend(BaseBackend):
         # Map any possible keywords.
         filtered = self._mapKeywordVals(filtered)
 
-        if 1 == len(filtered):
+        if len(filtered) == 1:
             if self._postOpMapper is not None:
                 filtered[0] = self._postOpMapper(filtered[0])
             return filtered[0]
@@ -452,7 +468,7 @@ class LimaCharlieBackend(BaseBackend):
         # Map any possible keywords.
         filtered = self._mapKeywordVals(filtered)
 
-        if 1 == len(filtered):
+        if len(filtered) == 1:
             if self._postOpMapper is not None:
                 filtered[0] = self._postOpMapper(filtered[0])
             return filtered[0]
@@ -498,7 +514,7 @@ class LimaCharlieBackend(BaseBackend):
                 else:
                     fieldname = self._fieldMappingInEffect[fieldname]
             except:
-                raise NotImplementedError("Field name %s not supported by backend." % (fieldname,))
+                raise NotImplementedError(f"Field name {fieldname} not supported by backend.")
 
         # If fieldname returned is None, it's a special case where we
         # ignore the node.
@@ -545,26 +561,21 @@ class LimaCharlieBackend(BaseBackend):
                 if self._postOpMapper is not None:
                     newOp = self._postOpMapper(newOp)
                 subOps.append(newOp)
-            if 1 == len(subOps):
-                return subOps[0]
-            return {
-                "op": "or",
-                "rules": subOps
-            }
+            return subOps[0] if len(subOps) == 1 else {"op": "or", "rules": subOps}
+
         elif isinstance(value, SigmaTypeModifier):
-            if isinstance(value, SigmaRegularExpressionModifier):
-                if fieldNameAndValCallback is not None:
-                    fieldname, value = fieldNameAndValCallback(fieldname, value)
-                result = {
-                    "op": "matches",
-                    "path": fieldname,
-                    "re": re.compile(value),
-                }
-                if self._postOpMapper is not None:
-                    result = self._postOpMapper(result)
-                return result
-            else:
-                raise TypeError("Backend does not support TypeModifier: %s" % (str(type(value))))
+            if not isinstance(value, SigmaRegularExpressionModifier):
+                raise TypeError(f"Backend does not support TypeModifier: {str(type(value))}")
+            if fieldNameAndValCallback is not None:
+                fieldname, value = fieldNameAndValCallback(fieldname, value)
+            result = {
+                "op": "matches",
+                "path": fieldname,
+                "re": re.compile(value),
+            }
+            if self._postOpMapper is not None:
+                result = self._postOpMapper(result)
+            return result
         elif value is None:
             if fieldNameAndValCallback is not None:
                 fieldname, value = fieldNameAndValCallback(fieldname, value)
@@ -577,7 +588,9 @@ class LimaCharlieBackend(BaseBackend):
                 result = self._postOpMapper(result)
             return result
         else:
-            raise TypeError("Backend does not support map values of type " + str(type(value)))
+            raise TypeError(
+                f"Backend does not support map values of type {str(type(value))}"
+            )
 
     def generateValueNode(self, node):
         return node
@@ -609,25 +622,16 @@ class LimaCharlieBackend(BaseBackend):
         if tmpVal.startswith("*"):
             isStartsWithWildcard = True
             tmpVal = tmpVal[1:]
-        if tmpVal.endswith("*") and not (tmpVal.endswith("\\*") and not tmpVal.endswith("\\\\*")):
+        if tmpVal.endswith("*") and (
+            not tmpVal.endswith("\\*") or tmpVal.endswith("\\\\*")
+        ):
             isEndsWithWildcard = True
-            if tmpVal.endswith("\\\\*"):
-                # An extra \ had to be there so it didn't escapte the
-                # *, but since we plan on removing the *, we can also
-                # remove one \.
-                tmpVal = tmpVal[:-2]
-            else:
-                tmpVal = tmpVal[:-1]
-
+            tmpVal = tmpVal[:-2] if tmpVal.endswith("\\\\*") else tmpVal[:-1]
         # Check to see if there are any other wildcards. If there are
         # we cannot use our shortcuts.
         if "*" not in tmpVal and "?" not in tmpVal:
-            if isStartsWithWildcard and isEndsWithWildcard:
-                return ("contains", tmpVal)
-
             if isStartsWithWildcard:
-                return ("ends with", tmpVal)
-
+                return ("contains", tmpVal) if isEndsWithWildcard else ("ends with", tmpVal)
             if isEndsWithWildcard:
                 return ("starts with", tmpVal)
 
@@ -644,35 +648,41 @@ class LimaCharlieBackend(BaseBackend):
                 # we can tell whether the wildcard is escaped
                 # (with odd number of escapes) or if it's just a
                 # backslash literal before a wildcard (even number).
-                if "\\" == tmpVal[i]:
+                if tmpVal[i] == "\\":
                     nEscapes += 1
                     continue
 
-                if "*" == tmpVal[i]:
-                    if 0 == nEscapes:
-                        segments.append(re.escape(tmpVal[:i]))
-                        segments.append(".*")
+                if tmpVal[i] == "*":
+                    if nEscapes == 0:
+                        segments.extend((re.escape(tmpVal[:i]), ".*"))
                     elif nEscapes % 2 == 0:
-                        segments.append(re.escape(tmpVal[:i - nEscapes]))
-                        segments.append(tmpVal[i - nEscapes:i])
-                        segments.append(".*")
+                        segments.extend(
+                            (
+                                re.escape(tmpVal[: i - nEscapes]),
+                                tmpVal[i - nEscapes : i],
+                                ".*",
+                            )
+                        )
+
                     else:
-                        segments.append(re.escape(tmpVal[:i - nEscapes]))
-                        segments.append(tmpVal[i - nEscapes:i + 1])
+                        segments.extend((re.escape(tmpVal[:i - nEscapes]), tmpVal[i - nEscapes:i + 1]))
                     tmpVal = tmpVal[i + 1:]
                     break
 
-                if "?" == tmpVal[i]:
-                    if 0 == nEscapes:
-                        segments.append(re.escape(tmpVal[:i]))
-                        segments.append(".")
+                if tmpVal[i] == "?":
+                    if nEscapes == 0:
+                        segments.extend((re.escape(tmpVal[:i]), "."))
                     elif nEscapes % 2 == 0:
-                        segments.append(re.escape(tmpVal[:i - nEscapes]))
-                        segments.append(tmpVal[i - nEscapes:i])
-                        segments.append(".")
+                        segments.extend(
+                            (
+                                re.escape(tmpVal[: i - nEscapes]),
+                                tmpVal[i - nEscapes : i],
+                                ".",
+                            )
+                        )
+
                     else:
-                        segments.append(re.escape(tmpVal[:i - nEscapes]))
-                        segments.append(tmpVal[i - nEscapes:i + 1])
+                        segments.extend((re.escape(tmpVal[:i - nEscapes]), tmpVal[i - nEscapes:i + 1]))
                     tmpVal = tmpVal[i + 1:]
                     break
 
@@ -712,10 +722,7 @@ class LimaCharlieBackend(BaseBackend):
             }
             if op == "matches":
                 newOp["re"] = newVal
-            elif op == "exists":
-                # Exists has no value.
-                pass
-            else:
+            elif op != "exists":
                 newOp["value"] = newVal
             mapped.append(newOp)
 

@@ -33,37 +33,36 @@ yaml.add_representer(dict, yaml_preserve_order)
 uuids = set()
 passed = True
 for path in paths:
-    print_verbose("Rule {}".format(str(path)))
+    print_verbose(f"Rule {str(path)}")
     with path.open("r") as f:
         rules = list(yaml.safe_load_all(f))
 
+    i = 1
     if args.verify:
-        i = 1
         for rule in rules:
             if "title" in rule:     # Rule with a title should also have a UUID
                 try:
                     UUID(rule["id"])
                 except ValueError:  # id is not a valid UUID
-                    print("Rule {} in file {} has a malformed UUID '{}'.".format(i, str(path), rule["id"]))
+                    print(f"""Rule {i} in file {str(path)} has a malformed UUID '{rule["id"]}'.""")
                     passed = False
                 except KeyError:    # rule has no id
-                    print("Rule {} in file {} has no UUID.".format(i, str(path)))
+                    print(f"Rule {i} in file {str(path)} has no UUID.")
                     passed = False
             i += 1
     else:
-        newrules = list()
+        newrules = []
         changed = False
-        i = 1
         for rule in rules:
             if "title" in rule and "id" not in rule:    # only assign id to rules that have a title and no id
-                newrule = dict()
+                newrule = {}
                 changed = True
                 for k, v in rule.items():
                     newrule[k] = v
                     if k == "title":    # insert id after title
                         uuid = uuid4()
                         newrule["id"] = str(uuid)
-                        print("Assigned UUID '{}' to rule {} in file {}.".format(uuid, i, str(path)))
+                        print(f"Assigned UUID '{uuid}' to rule {i} in file {str(path)}.")
                 newrules.append(newrule)
             else:
                 newrules.append(rule)

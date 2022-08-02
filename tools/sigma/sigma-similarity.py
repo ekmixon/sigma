@@ -48,13 +48,13 @@ class SigmaNormalizationBackend(SingleTextQueryBackend):
 
     def generateTypedValueNode(self, node):
         """Return normalized form of typed values"""
-        return "type_{}({})".format(node.identifier, str(node))
+        return f"type_{node.identifier}({str(node)})"
 
     def generateAggregation(self, agg):
         if agg.aggfunc_notrans == "near":
-            return " near in={} ex={}".format(str(agg.include), str(agg.exclude))
+            return f" near in={str(agg.include)} ex={str(agg.exclude)}"
         else:
-            return " | {}({}) by {} {} {}".format(agg.aggfunc_notrans, agg.aggfield, agg.groupfield, agg.cond_op, agg.condition)
+            return f" | {agg.aggfunc_notrans}({agg.aggfield}) by {agg.groupfield} {agg.cond_op} {agg.condition}"
 
 backend = SigmaNormalizationBackend(SigmaConfiguration())
 

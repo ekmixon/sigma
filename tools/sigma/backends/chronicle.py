@@ -58,11 +58,15 @@ class ChronicleBackend(SingleTextQueryBackend):
     def parseTitle(self, title):
         new_title = re.sub(re.compile('[()*:;+!,\[\].?"-/]'), "", title.lower())
         new_title = re.sub(re.compile('\s'), "_", new_title.lower())
-        index = 0
-        for i, title_char in enumerate(new_title):
-            if not title_char.isdigit():
-                index = i
-                break
+        index = next(
+            (
+                i
+                for i, title_char in enumerate(new_title)
+                if not title_char.isdigit()
+            ),
+            0,
+        )
+
         new_title = new_title[index:]
         new_title = new_title.strip("_")
         return new_title
@@ -80,25 +84,27 @@ class ChronicleBackend(SingleTextQueryBackend):
         elif value is None:
             return self.nullExpression % (transformed_fieldname, )
         else:
-            raise TypeError("Backend does not support map values of type " + str(type(value)))
+            raise TypeError(
+                f"Backend does not support map values of type {str(type(value))}"
+            )
 
     def createFinalRule(self, body):
         # Spaces required in rule for structure
         function_name = self.parseTitle(self.title)
         if self.rule_count != 0:
-            function_name += "_part_{}".format(self.rule_count)
+            function_name += f"_part_{self.rule_count}"
 
         meta = """ meta:\n    author = \"{author}\"\n    description = \"{description}\"\n    reference = \"{reference}\"\n    version = \"0.01\"""".format(
             author=self.author, description=self.description, reference=""
         )
         if self.created:
-            meta += "\n    created = \"{}\"".format(self.created)
+            meta += f'\n    created = \"{self.created}\"'
         if any(self.logsource):
             logsources = "\n    ".join([f'{i} = "{j}"' for i, j in self.logsource.items() if i not in ("description", "definition")])
-            meta += "\n    {}".format(logsources)
+            meta += f"\n    {logsources}"
         if self.tags:
             tags = ", ".join([item.replace("attack.", "") for item in self.tags])
-            meta += "\n    mitre = \"{}\"".format(tags)
+            meta += f'\n    mitre = \"{tags}\"'
         condition_func = """  condition:\n    {condition}""".format(condition=self.condition)
         result = """rule {function_name} {{\n{meta}\n\n  events:\n{function}\n\n{condition}\n}}""".format(
             function_name=function_name,
@@ -121,10 +127,7 @@ class ChronicleBackend(SingleTextQueryBackend):
             val = re.compile(r'([+.?])').sub("\\\\\g<1>", val)
             val = val.replace("*", ".*")
             return f"re.regex({transformed_fieldname}, `{val}`)"
-        if val and isinstance(val, str):
-            return self.mapExpression % (transformed_fieldname, self.generateNode(val))
-        else:
-            return self.mapExpression % (transformed_fieldname, self.generateNode(val))
+        return self.mapExpression % (transformed_fieldname, self.generateNode(val))
 
     def generateMapItemListNode(self, fieldname, value):
         list_query = []
@@ -138,13 +141,13 @@ class ChronicleBackend(SingleTextQueryBackend):
     def generate(self, sigmaparser):
         detection = sigmaparser.parsedyaml.get("detection")
         condition_name = [item for item in detection.keys() if item not in ("condition", "keywords")]
-        if any(condition_name):
-            self.condition_name = condition_name[0]
-        else:
-            self.condition_name = "event"
+        self.condition_name = condition_name[0] if any(condition_name) else "event"
         self.author = sigmaparser.parsedyaml.get("author")
         self.title = sigmaparser.parsedyaml.get("title")
-        description = "{} Author: {}.".format(sigmaparser.parsedyaml.get("description"), self.author)
+        description = (
+            f'{sigmaparser.parsedyaml.get("description")} Author: {self.author}.'
+        )
+
         description = description.replace("\\", "\\\\")
         description = description.replace("\n", "")
         self.description = description.replace('"', '\\"')
@@ -153,33 +156,41 @@ class ChronicleBackend(SingleTextQueryBackend):
         if not any(references):
             references = sigmaparser.parsedyaml.get("references", [])
         self.references = references
-        self.logsource = sigmaparser.parsedyaml.get("logsource") if sigmaparser.parsedyaml.get("logsource") else sigmaparser.parsedyaml.get("logsources", {})
+        self.logsource = sigmaparser.parsedyaml.get(
+            "logsource"
+        ) or sigmaparser.parsedyaml.get("logsources", {})
+
         self.tags = sigmaparser.parsedyaml.get("tags")
+        aggregation = None
         for parsed in sigmaparser.condparsed:
-            aggregation = None
             translate = self.generateQuery(parsed)
-            self.condition = "${}".format(self.condition_name)
+            self.condition = f"${self.condition_name}"
             if parsed.parsedAgg:
                 translate = self.generateAggregation(agg=parsed.parsedAgg, body=translate)
             return self.createFinalRule(body=translate)
 
     def generateQuery(self, parsed):
-        result = self.generateNode(parsed.parsedSearch)
-        return result
+        return self.generateNode(parsed.parsedSearch)
 
     def generateAggregation(self, agg, body):
         if agg is None:
             return ""
         if agg.aggfunc == SigmaAggregationParser.AGGFUNC_NEAR:
             raise NotImplementedError(
-                "The 'near' aggregation operator is not "
-                + f"implemented for the %s backend" % self.identifier
+                (
+                    "The 'near' aggregation operator is not "
+                    + f"implemented for the {self.identifier} backend"
+                )
             )
+
         if agg.aggfunc_notrans != 'count' and agg.aggfield is None:
             raise NotSupportedError(
-                "The '%s' aggregation operator " % agg.aggfunc_notrans
-                + "must have an aggregation field for the %s backend" % self.identifier
+                (
+                    "The '%s' aggregation operator " % agg.aggfunc_notrans
+                    + f"must have an aggregation field for the {self.identifier} backend"
+                )
             )
+
         if agg.aggfunc_notrans == 'count':
             if agg.groupfield:
                 self.condition = "${condition} and #target {op} {cond}".format(condition=self.condition_name,
@@ -188,5 +199,5 @@ class ChronicleBackend(SingleTextQueryBackend):
                                                                                           cond=agg.condition)
                 body += "\n${condition}.{field} = $target".format(condition=self.condition_name, field=agg.groupfield,)
             else:
-                self.condition = "#{} {} {}".format(self.condition_name, agg.cond_op, agg.condition)
+                self.condition = f"#{self.condition_name} {agg.cond_op} {agg.condition}"
             return body

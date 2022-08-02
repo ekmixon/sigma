@@ -77,7 +77,7 @@ def rule_element(file_content, elements):
     :return: the value of the key in the yaml document
     """
     try:
-        logger.debug("file_content: %s" % file_content)
+        logger.debug(f"file_content: {file_content}")
         yaml.safe_load(file_content.replace("---", ""))
     except TypeError:
         raise Exception('Unsupported')
@@ -87,9 +87,7 @@ def rule_element(file_content, elements):
             element_output = yaml.safe_load(file_content.replace("---", ""))[e]
         except TypeError:
             pass
-    if element_output is None:
-        return ""
-    return element_output
+    return "" if element_output is None else element_output
 
 
 def get_rule_as_sumologic(file):
@@ -102,7 +100,7 @@ def get_rule_as_sumologic(file):
     if not os.path.exists(args.sigmac):
         logger.error("Cannot find sigmac rule coverter at '%s', please set a correct location via '--sigmac'")
     cmd = [args.sigmac, file, "--target", "sumologic"]
-    logger.info('get_rule_as_sumologic cmd: %s' % cmd)
+    logger.info(f'get_rule_as_sumologic cmd: {cmd}')
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output, err = process.communicate()
 
@@ -110,8 +108,8 @@ def get_rule_as_sumologic(file):
     output = output.decode("utf-8")
     err = err.decode("utf-8")
 
-    logger.info('get_rule_as_sumologic output: %s' % output)
-    logger.info('get_rule_as_sumologic stderr: %s' % err)
+    logger.info(f'get_rule_as_sumologic output: {output}')
+    logger.info(f'get_rule_as_sumologic stderr: {err}')
     if err or "unsupported" in err:
         logger.error('Unsupported output at this time')
         raise Exception('Unsupported output at this time')
@@ -119,9 +117,7 @@ def get_rule_as_sumologic(file):
     # Remove empty string from \n
     output = [a for a in output if a]
     # Handle case of multiple queries returned
-    if len(output) > 1:
-        return " OR ".join(output)
-    return "".join(output)
+    return " OR ".join(output) if len(output) > 1 else "".join(output)
 
 if args.help:
     parser.print_help()

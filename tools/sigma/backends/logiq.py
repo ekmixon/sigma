@@ -27,9 +27,11 @@ class LogiqBackend(SingleTextQueryBackend):
     def generate(self, sigmaparser):
         """Method is called for each sigma rule and receives the parsed rule (SigmaParser)"""
 
-        eventRule = dict()
-        eventRule["name"] = sigmaparser.parsedyaml["title"]
-        eventRule["groupName"] = sigmaparser.parsedyaml["logsource"].get("product", "")
+        eventRule = {
+            "name": sigmaparser.parsedyaml["title"],
+            "groupName": sigmaparser.parsedyaml["logsource"].get("product", ""),
+        }
+
         eventRule["description"] = sigmaparser.parsedyaml["description"]
         eventRule["condition"] = sigmaparser.parsedyaml["detection"]
         eventRule["level"] = sigmaparser.parsedyaml["level"]
@@ -56,6 +58,6 @@ class LogiqBackend(SingleTextQueryBackend):
         return val
 
     def generateListNode(self, node):
-        if not set([type(value) for value in node]).issubset({str, int}):
+        if not {type(value) for value in node}.issubset({str, int}):
             raise TypeError("List values must be strings or numbers")
         return self.generateORNode(node)
